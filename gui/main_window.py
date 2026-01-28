@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import (
-    QWidget, QPushButton, QLabel, QMainWindow,
+    QWidget, QPushButton, QLabel, QMainWindow, QMessageBox,
     QVBoxLayout, QHBoxLayout, QFileDialog, QAction
 )
 from PyQt5.QtCore import Qt
@@ -13,7 +13,7 @@ from libs.edit_lib import EditLib
 from widgets.image_canvas import ImageCanvas
 from libs.view_lib import ViewLib
 from libs.help_lib import HelpLib
-
+from libs.dialog_lib import DialogLib
 from logic.auto_label_logic import AutoLabelLogic
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -194,3 +194,36 @@ class MainWindow(QMainWindow):
                 bw = box.width() / w
                 bh = box.height() / h
                 f.write(f"0 {x} {y} {bw} {bh}\n")
+
+    def auto_label(self):
+        image_dir = DialogLib.select_image_folder(self)
+        if not image_dir:
+            return
+        model_path = DialogLib.select_model_file(self)
+        if not model_path:
+            return
+        label_dir = DialogLib.select_label_folder(self)
+        if not label_dir:
+            return
+        image_count = len([
+            f for f in os.listdir(image_dir)
+            if f.lower().endswith((".jpg", ".png", ".jpeg"))
+        ])
+        ok = DialogLib.confirm(
+            self,
+            image_count,
+            model_path,
+            label_dir
+        )
+        if not ok:
+            return
+        total = self.logic.run(
+            image_dir=image_dir,
+            model_path=model_path,
+            label_dir=label_dir
+        )
+        QMessageBox.information(
+            self,
+            "Done",
+            f"✅ Auto label hoàn tất\n{total} ảnh"
+        )

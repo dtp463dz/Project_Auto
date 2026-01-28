@@ -20,7 +20,11 @@ class EditLib:
         self.menu.addAction(self.action_redo)
 
     def undo(self):
-        print("Undo action")
+        if self.main.canvas.boxes:
+            self.main.canvas.boxes.pop()
+            self.main.canvas.update()
 
     def redo(self):
-        print("Redo action")
+        if self.main.canvas.boxes:
+            self.main.canvas.boxes.append(self.main.canvas.boxes[-1])
+            self.main.canvas.update()
