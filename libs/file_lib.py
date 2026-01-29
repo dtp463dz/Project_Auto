@@ -1,6 +1,5 @@
 import os
 from PyQt5.QtWidgets import QFileDialog, QAction
-
 class FileLib:
 
     IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp")
@@ -15,8 +14,8 @@ class FileLib:
         self.open_ng_action = QAction("Open NG Folder", self.main)
         self.exit_action = QAction("Exit", self.main)
 
-        self.open_ok_action.triggered.connect(self.open_ok_menu)
-        self.open_ng_action.triggered.connect(self.open_ng_menu)
+        self.open_ok_action.triggered.connect(self.open_ok_folder)
+        self.open_ng_action.triggered.connect(self.open_ng_folder)
         self.exit_action.triggered.connect(self.main.close)
 
         self.menu.addAction(self.open_ok_action)
@@ -36,16 +35,8 @@ class FileLib:
             if f.lower().endswith(self.IMAGE_EXTS)
         )
     
-    def open_ok_menu(self):
-        folder = self.open_folder("Select OK Folder")
-        if folder:
-            self.main.ok_images = self.load_images(folder)
-            if self.main.ok_images:
-                self.main.show_image(self.main.ok_images[0], self.main.ok_label)
+    def open_ok_folder(self):
+        self.main.select_ok_folder()
 
-    def open_ng_menu(self):
-        folder = self.open_folder("Select NG Folder")
-        if folder:
-            self.main.ng_images = self.load_images(folder)
-            if self.main.ng_images:
-                self.main.show_image(self.main.ng_images[0], self.main.ng_label)
+    def open_ng_folder(self):
+        self.main.select_ng_folder()

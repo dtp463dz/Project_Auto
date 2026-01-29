@@ -43,24 +43,18 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #F5F7FA;
-                color: #2E2E2E;
+                background-color: #F7F9FC;
                 font-family: Segoe UI;
                 font-size: 13px;
             }
 
             QPushButton {
                 background-color: #4A90E2;
-                color: #d0d7e2;
-                border: none;
+                color: white;
                 border-radius: 6px;
                 padding: 6px 14px;
             }
                            
-            QWidget {
-                background-color: #F5F7FA;              
-            }
-
             QPushButton:hover {
                 background-color: #6AAEFF;
             }
@@ -68,34 +62,20 @@ class MainWindow(QMainWindow):
             QPushButton:pressed {
                 background-color: #357ABD;
             }
-
-            QLineEdit {
-                background-color: #FFFFFF;
-                border: 1px solid #D0D7E2;
-                border-radius: 4px;
-                padding: 6px;
-            }
-
-            QGroupBox {
-                background-color: #FFFFFF;
-                border: 1px solid #D0D7E2;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding: 8px;
-            }
-                           
-            QLabel{
-                color: #2E2E2E
-            }
-
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 6px;
-                font-weight: bold;
-            }
+           
             """)
         central_widget = QWidget(self)
+        # status bar
+        self.create_status_bar()
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(self.model_label)
+        status_layout.addStretch()
+        status_layout.addWidget(self.image_info)
+
+        # canvas
+        self.canvas.setMinimumSize(800, 600)
+
+        # control buttons 
         self.btn_ok = QPushButton("📂 OK Folder")
         self.btn_ng = QPushButton("📂 NG Folder")
         self.btn_next = QPushButton("Next Image")
@@ -114,23 +94,26 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out.clicked.connect(self.canvas.zoom_out)
         self.btn_save.clicked.connect(self.save_label)
 
-        left_layout = QVBoxLayout()
-        left_layout.addWidget(self.btn_ok)
-        left_layout.addWidget(self.btn_ng)
-        left_layout.addWidget(self.btn_auto)
-        left_layout.addWidget(self.btn_next)
-        left_layout.addWidget(self.btn_prev)
-        left_layout.addWidget(self.btn_zoom_in)
-        left_layout.addWidget(self.btn_zoom_out)
-        left_layout.addWidget(self.btn_save)
-        left_layout.addStretch()
+        control_layout = QVBoxLayout()
+        control_layout.addStretch()
+        control_layout.addWidget(self.btn_ok)
+        control_layout.addWidget(self.btn_ng)
+        control_layout.addWidget(self.btn_auto)
+        control_layout.addWidget(self.btn_next)
+        control_layout.addWidget(self.btn_prev)
+        control_layout.addWidget(self.btn_zoom_in)
+        control_layout.addWidget(self.btn_zoom_out)
+        control_layout.addWidget(self.btn_save)
+        control_layout.addStretch()
 
-        image_layout = QHBoxLayout()
-        image_layout.addWidget(self.canvas)
+        # image_layout = QHBoxLayout()
+        # image_layout.addWidget(self.canvas)
 
+        # main layout 
         main_layout = QHBoxLayout()
-        main_layout.addLayout(left_layout)
-        main_layout.addLayout(image_layout)
+        main_layout.addLayout(control_layout)
+        main_layout.addLayout(status_layout)
+        main_layout.addWidget(self.canvas)
 
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
@@ -201,38 +184,64 @@ class MainWindow(QMainWindow):
         if not images:
             return
         
-        self.ok_images = images
         self.current_images = images
         self.current_index = 0
         self.current_mode = "OK"
-        self.canvas.load_image(images[0])
+        self.model_label.setText("MODE: OK")
+        self.model_label.setStyleSheet("""
+            QLabel {
+                background-color: #E8F5E9;
+                border: 1px solid #81C784;
+                color: #2E7D32;
+                font-size: 16px;
+                font-weight: bold;
+            }
+        """)
+        self.update_image()
 
     def load_ng_folder(self, folder):
         images = self.file_lib.load_images(folder)
         if not images:
             return
         
-        self.ok_images = images
         self.current_images = images
         self.current_index = 0
         self.current_mode = "NG"
-        self.canvas.load_image(images[0])
+        self.model_label.setText("MODE: NG")
+        self.model_label.setStyleSheet("""
+            QLabel {
+                background-color: #FDECEA;
+                border: 1px solid #EF9A9A;
+                color: #B71C1C;
+                font-size: 16px;
+                font-weight: bold;
+            }
+        """)
+        self.update_image()
 
+    def update_image(self):
+        if not self.current_images:
+            return
+        self.canvas.load_image(self.current_images[self.current_index])
+        self.image_info.setText(f"{self.current_index + 1} / {len(self.current_images)}")
 
-    def auto_label(self):
-        self.logic.run(self.ok_images, self.ng_images)
+    def create_status_bar(self): 
+        self.model_label = QLabel("MODE: NONE")
+        self.model_label.setFixedHeight(36)
+        self.model_label.setAlignment(Qt.AlignCenter)
+        self.model_label.setStyleSheet("""
+            QLabel {
+                background-color: #E3F2FD;
+                border: 1px solid #90CAF9;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: bold;
+                color: #1565C0;
+            }
+        """)
 
-    # def show_image(self, path, label):
-    #     img = cv2.imread(path)
-    #     if img is None:
-    #         print("Cannot read image:", path)
-    #         return
-    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #     h, w, ch = img.shape
-    #     qt_img = QImage(img.data, w, h, ch*w, QImage.Format_RGB888)
-    #     pix = QPixmap.fromImage(qt_img)
-    #     pix = pix.scaled(label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-    #     label.setPixmap(pix)
+        self.image_info = QLabel("0 / 0")
+        self.image_info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
     def next_image(self):
         if not self.current_images:
