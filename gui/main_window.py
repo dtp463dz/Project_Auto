@@ -15,10 +15,11 @@ from libs.view_lib import ViewLib
 from libs.help_lib import HelpLib
 from libs.dialog_lib import DialogLib
 from logic.auto_label_logic import AutoLabelLogic
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-
         self.setWindowTitle("TPLabel")
         self.resize(1200, 700)
         self.file_lib = FileLib(self)
@@ -32,13 +33,68 @@ class MainWindow(QMainWindow):
         self.ng_images = []
         self.save_labels = []
         self.current_index = 0
-        self.current_image = []
+        self.current_images = []
+        self.current_mode = None 
 
         self.init_menu()
         self.init_ui()
 
     # UI
     def init_ui(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #F5F7FA;
+                color: #2E2E2E;
+                font-family: Segoe UI;
+                font-size: 13px;
+            }
+
+            QPushButton {
+                background-color: #4A90E2;
+                color: #d0d7e2;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 14px;
+            }
+                           
+            QWidget {
+                background-color: #F5F7FA;              
+            }
+
+            QPushButton:hover {
+                background-color: #6AAEFF;
+            }
+
+            QPushButton:pressed {
+                background-color: #357ABD;
+            }
+
+            QLineEdit {
+                background-color: #FFFFFF;
+                border: 1px solid #D0D7E2;
+                border-radius: 4px;
+                padding: 6px;
+            }
+
+            QGroupBox {
+                background-color: #FFFFFF;
+                border: 1px solid #D0D7E2;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding: 8px;
+            }
+                           
+            QLabel{
+                color: #2E2E2E
+            }
+
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 6px;
+                font-weight: bold;
+            }
+            """)
         central_widget = QWidget(self)
         self.btn_ok = QPushButton("📂 OK Folder")
         self.btn_ng = QPushButton("📂 NG Folder")
@@ -49,8 +105,8 @@ class MainWindow(QMainWindow):
         self.btn_auto = QPushButton("⚙ Auto Labels")
         self.btn_save = QPushButton("💾 Save")
 
-        self.btn_ok.clicked.connect(self.open_ok_folder)
-        self.btn_ng.clicked.connect(self.open_ng_folder)
+        self.btn_ok.clicked.connect(self.select_ok_folder)
+        self.btn_ng.clicked.connect(self.select_ng_folder)
         self.btn_auto.clicked.connect(self.auto_label)
         self.btn_next.clicked.connect(self.next_image)
         self.btn_prev.clicked.connect(self.prev_image)
@@ -69,19 +125,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.btn_save)
         left_layout.addStretch()
 
-        self.ok_label = QLabel("OK IMAGE")
-        self.ng_label = QLabel("NG IMAGE")
-
-        self.ok_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.ng_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.ok_label.setStyleSheet("border:2px solid green;")
-        self.ng_label.setStyleSheet("border:2px solid red;")
-        self.ok_label.setFixedSize(500, 500)
-        self.ng_label.setFixedSize(500, 500)
-
         image_layout = QHBoxLayout()
-        image_layout.addWidget(self.ok_label)
-        image_layout.addWidget(self.ng_label)
         image_layout.addWidget(self.canvas)
 
         main_layout = QHBoxLayout()
@@ -101,8 +145,8 @@ class MainWindow(QMainWindow):
         open_ng = QAction("Open NG Folder", self)
         exit_app = QAction("Exit", self)
 
-        open_ok.triggered.connect(self.open_ok_folder)
-        open_ng.triggered.connect(self.open_ng_folder)
+        open_ok.triggered.connect(self.select_ok_folder)
+        open_ng.triggered.connect(self.select_ng_folder)
         exit_app.triggered.connect(self.close)
 
         file_menu.addAction(open_ok)
@@ -142,49 +186,74 @@ class MainWindow(QMainWindow):
 
         help_menu.addAction(about)
 
-    def open_ok_folder(self):
-        folder = self.file_lib.open_ok_menu()
+    def select_ok_folder(self): 
+        folder = QFileDialog.getExistingDirectory(self, "Select OK Folder")
         if folder:
-            self.ok_images = self.file_lib.load_images(folder)
-            if self.ok_images:
-                self.canvas.show_image(self.ok_images[self.current_index], self.ok_label)
+            self.load_ok_folder(folder)
 
-    def open_ng_folder(self):
-        folder = self.file_lib.open_ng_menu()
+    def select_ng_folder(self): 
+        folder = QFileDialog.getExistingDirectory(self, "Select NG Folder")
         if folder:
-            self.ng_images = self.file_lib.load_images(folder)
-            if self.ng_images:
-                self.canvas.show_image(self.ng_images[self.current_index], self.ng_label)
+            self.load_ng_folder(folder)
+
+    def load_ok_folder(self, folder):
+        images = self.file_lib.load_images(folder)
+        if not images:
+            return
+        
+        self.ok_images = images
+        self.current_images = images
+        self.current_index = 0
+        self.current_mode = "OK"
+        self.canvas.load_image(images[0])
+
+    def load_ng_folder(self, folder):
+        images = self.file_lib.load_images(folder)
+        if not images:
+            return
+        
+        self.ok_images = images
+        self.current_images = images
+        self.current_index = 0
+        self.current_mode = "NG"
+        self.canvas.load_image(images[0])
+
 
     def auto_label(self):
         self.logic.run(self.ok_images, self.ng_images)
 
-    def show_image(self, path, label):
-        img = cv2.imread(path)
-        if img is None:
-            print("Cannot read image:", path)
-            return
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        h, w, ch = img.shape
-        qt_img = QImage(img.data, w, h, ch*w, QImage.Format_RGB888)
-        pix = QPixmap.fromImage(qt_img)
-        pix = pix.scaled(label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        label.setPixmap(pix)
+    # def show_image(self, path, label):
+    #     img = cv2.imread(path)
+    #     if img is None:
+    #         print("Cannot read image:", path)
+    #         return
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     h, w, ch = img.shape
+    #     qt_img = QImage(img.data, w, h, ch*w, QImage.Format_RGB888)
+    #     pix = QPixmap.fromImage(qt_img)
+    #     pix = pix.scaled(label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    #     label.setPixmap(pix)
 
     def next_image(self):
-        if self.current_index < len(self.current_image) - 1:
+        if not self.current_images:
+            print('next fail')
+            return
+        if self.current_index < len(self.current_images) - 1:
             self.current_index += 1
-            self.canvas.load_image(self.current_image[self.current_index])
+            self.canvas.load_image(self.current_images[self.current_index])
 
     def prev_image(self):
+        if not self.current_images:
+            print('prev fail')
+            return
         if self.current_index > 0:
             self.current_index -= 1
-            self.canvas.load_image(self.current_image[self.current_index])
+            self.canvas.load_image(self.current_images[self.current_index])
 
     def save_label(self):
         h = self.canvas.pixmap.height()
         w = self.canvas.pixmap.width()
-        label_path = self.current_image[self.current_index]
+        label_path = self.current_images[self.current_index]
         label_path = label_path.replace("images", "labels").replace(".jpg", ".txt")
 
         with open(label_path, "w") as f:
