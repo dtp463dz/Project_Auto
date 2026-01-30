@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QLabel, QMainWindow, QMessageBox,
-    QVBoxLayout, QHBoxLayout, QFileDialog, QAction
+    QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
@@ -13,8 +13,10 @@ from libs.edit_lib import EditLib
 from widgets.image_canvas import ImageCanvas
 from libs.view_lib import ViewLib
 from libs.help_lib import HelpLib
-from libs.dialog_lib import DialogLib
+from dialog.dialog_lib import DialogLib
+from dialog.select_label_dialog import SelectLabelDialog
 from logic.auto_label_logic import AutoLabelLogic
+from dialog.new_label_dialog import NewLabelDialog
 
 
 class MainWindow(QMainWindow):
@@ -29,9 +31,8 @@ class MainWindow(QMainWindow):
         self.canvas = ImageCanvas()
         self.logic = AutoLabelLogic()
 
-        self.ok_images = []
-        self.ng_images = []
-        self.save_labels = []
+        self.labels = []
+        self.label_to_id = {}
         self.current_index = 0
         self.current_images = []
         self.current_mode = None 
@@ -72,8 +73,13 @@ class MainWindow(QMainWindow):
         status_layout.addStretch()
         status_layout.addWidget(self.image_info)
 
+        self.label_list = QListWidget()
+        self.label_list.itemClicked.connect(self.on_label_selected)
+
+
         # canvas
         self.canvas.setMinimumSize(800, 600)
+        self.canvas.box_created.connect(self.on_box_created)
 
         # control buttons 
         self.btn_ok = QPushButton("📂 OK Folder")
@@ -105,9 +111,6 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.btn_zoom_out)
         control_layout.addWidget(self.btn_save)
         control_layout.addStretch()
-
-        # image_layout = QHBoxLayout()
-        # image_layout.addWidget(self.canvas)
 
         # main layout 
         main_layout = QHBoxLayout()
@@ -259,6 +262,44 @@ class MainWindow(QMainWindow):
             self.current_index -= 1
             self.canvas.load_image(self.current_images[self.current_index])
 
+    def create_label(self):
+        dialog = NewLabelDialog()
+        if dialog.exec_(): 
+            name = dialog.name
+            if name not in self.label_to_id:
+                label_id = len(self.labels)
+                self.labels.append(name)
+                self.label_to_id[name] = label_id
+                self.label_list.addItem(name)
+
+    def on_label_selected(self, item):
+        label_name = item.text()
+        label_id = self.label_to_id[label_name]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+        self.canvas.set_label(label_id)
+
+    def on_box_created(self, rect):
+        dialog = SelectLabelDialog(self.labels)
+
+        if dialog.exec_():
+            label_name = dialog.selected_label
+            if not label_name:
+                return
+
+            if label_name not in self.label_to_id:
+                label_id = len(self.labels)
+                self.labels.append(label_name)
+                self.label_to_id[label_name] = label_id
+            else:
+                label_id = self.label_to_id[label_name]
+
+            self.canvas.boxes.append({
+                "label": label_id,
+                "label_name": label_name,
+                "rect" : rect
+            })
+
+            self.canvas.update()
+
     def save_label(self):
         h = self.canvas.pixmap.height()
         w = self.canvas.pixmap.width()
@@ -266,12 +307,15 @@ class MainWindow(QMainWindow):
         label_path = label_path.replace("images", "labels").replace(".jpg", ".txt")
 
         with open(label_path, "w") as f:
-            for box in self.canvas.boxes:
+            for item in self.canvas.boxes:
+                label = item["label"]
+                box = item["rect"]
+
                 x = (box.center().x()) / w
                 y = (box.center().y()) / h
                 bw = box.width() / w
                 bh = box.height() / h
-                f.write(f"0 {x} {y} {bw} {bh}\n")
+                f.write(f"{label} {x:.6f} {y:.6f} {bw:.6f} {bh:.6f}\n")
 
     def auto_label(self):
         image_dir = DialogLib.select_image_folder(self)
