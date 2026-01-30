@@ -10,7 +10,7 @@ class ImageCanvas(QWidget):
         self.pixmap = None
         self.scale = 1.0
         self.boxes = []
-        self.drawing = False
+        # self.drawing = False
         self.current_label = None
         self.current_rect = None
         self.start_pos = None
@@ -45,7 +45,6 @@ class ImageCanvas(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHints(QPainter.Antialiasing)
-
         scaled = self.pixmap.scaled(
             self.pixmap.size() * self.scale,
             Qt.KeepAspectRatio,
@@ -67,6 +66,14 @@ class ImageCanvas(QWidget):
             painter.drawRect(canvas_rect)
             if label_name:
                 painter.drawText(canvas_rect.topLeft() + QPoint(3, -3), label_name)
+
+        # drawing bbox(realtime)
+        if self.current_rect: 
+            canvas_rect = self.map_to_canvas(self.current_rect.normalized())
+            pen = QPen(Qt.yellow, 2, Qt.DashLine)
+            painter.setPen(pen)
+            painter.drawRect(canvas_rect)
+            self.draw_handles(painter, canvas_rect)
     
 
     def map_to_image(self, pos):
@@ -85,8 +92,8 @@ class ImageCanvas(QWidget):
         self.setFocus()
         if not self.pixmap:
             return
-        if not self.drawing:
-            return
+        # if not self.drawing:
+        #     return
 
         if event.button() == Qt.LeftButton:
             self.start_pos = self.map_to_image(event.pos())
@@ -104,7 +111,7 @@ class ImageCanvas(QWidget):
 
         self.current_rect = None
         self.start_pos = None
-        self.drawing = False
+        # self.drawing = False
         self.update()
 
     def fit_to_window(self):
@@ -141,11 +148,32 @@ class ImageCanvas(QWidget):
                 return
             
         if event.key() == Qt.Key_W:
-            self.drawing = True
+            # self.drawing = True
             print("CREATE BOX MODE")
             return    
 
         super().keyPressEvent(event)
+
+    # vẽ 4 điểm góc
+    def draw_handles(self, painter, rect):
+        size = 6
+        half = size // 2
+        points = [
+            rect.topLeft(),
+            rect.topRight(),
+            rect.bottomLeft(),
+            rect.bottomRight()
+        ]
+
+        painter.setBrush(QColor(255, 255, 255))
+        painter.setPen(QPen(Qt.black, 1))
+        for p in points:
+            painter.drawRect(
+                p.x() - half,
+                p.y() - half,
+                size,
+                size
+            )
 
     # ctrl zoom in, zoom out
     def wheelEvent(self, event):
