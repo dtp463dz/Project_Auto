@@ -80,6 +80,7 @@ class MainWindow(QMainWindow):
         # canvas
         self.canvas.setMinimumSize(800, 600)
         self.canvas.box_created.connect(self.on_box_created)
+        self.canvas.box_double_clicked.connect(self.on_edit_label)
 
         # control buttons 
         self.btn_ok = QPushButton("📂 OK Folder")
@@ -316,6 +317,19 @@ class MainWindow(QMainWindow):
                 bw = box.width() / w
                 bh = box.height() / h
                 f.write(f"{label} {x:.6f} {y:.6f} {bw:.6f} {bh:.6f}\n")
+
+    # edit label
+    def on_edit_label(self, box_index):
+        item = self.canvas.boxes[box_index]
+        dialog = SelectLabelDialog(
+            self.labels,
+            current = item["label"]
+        )
+        if dialog.exec_():
+            label_id, label_name = dialog.get_result()
+            item["label"] = label_id
+            item["label_name"] = label_name
+            self.canvas.update()
 
     def auto_label(self):
         image_dir = DialogLib.select_image_folder(self)

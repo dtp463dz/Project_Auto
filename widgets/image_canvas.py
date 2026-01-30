@@ -1,23 +1,28 @@
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor
-from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal
+from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize
 import colorsys
 
 class ImageCanvas(QWidget):
     box_created = pyqtSignal(QRect)
+    box_double_clicked = pyqtSignal(int)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pixmap = None
         self.scale = 1.0
         self.boxes = []
-        # self.drawing = False
+        self.drawing = False
         self.current_label = None
         self.current_rect = None
         self.start_pos = None
+        self.selected_box = None
+        self.resize_mode = None # tl, tr,bl, br
+        self.dragging = False
+        self.drag_offset = QPoint()
         self.offset = QPoint(0, 0)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
-        
 
     def load_image(self, path):
         self.pixmap = QPixmap(path)
@@ -59,13 +64,19 @@ class ImageCanvas(QWidget):
             rect = item["rect"]
             label_id = item["label"]
             label_name = item.get("label_name", "")
-
-            pen = QPen(self.get_label_color(label_id), 2)
-            painter.setPen(pen)
             canvas_rect = self.map_to_canvas(rect)
+            if item.get("selected"):
+                pen = QPen(Qt.cyan, 2, Qt.DashLine)
+            else:
+                pen = QPen(self.get_label_color(label_id), 2)
+
+            painter.setPen(pen)
             painter.drawRect(canvas_rect)
             if label_name:
                 painter.drawText(canvas_rect.topLeft() + QPoint(3, -3), label_name)
+
+            if item.get("selected"):
+                self.draw_handles(painter, canvas_rect)
 
         # drawing bbox(realtime)
         if self.current_rect: 
@@ -88,31 +99,108 @@ class ImageCanvas(QWidget):
         h = rect.height() * self.scale
         return QRect(int(x), int(y), int(w), int(h))
 
+    # click vào bbox, click ra ngoài
     def mousePressEvent(self, event):
         self.setFocus()
         if not self.pixmap:
             return
-        # if not self.drawing:
-        #     return
+        
+        pos_canvas = event.pos()
+        pos_img = self.map_to_image(pos_canvas)
 
         if event.button() == Qt.LeftButton:
-            self.start_pos = self.map_to_image(event.pos())
+            if self.selected_box is not None:
+                item = self.boxes[self.selected_box]
+                rect_canvas = self.map_to_canvas(item["rect"])
+                handle = self.detect_handle(pos_canvas, rect_canvas)
+                if handle:
+                    self.resize_mode=handle
+                    return
 
+            # ưu tiên select box 
+            idx = self.find_box_at(pos_img)
+            if idx != -1:
+                self.selected_box = idx
+                for b in self.boxes:
+                    b["selected"] = False
+                self.boxes[idx]["selected"] = True
+                self.dragging = True
+                self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
+                self.setCursor(Qt.SizeAllCursor)
+                self.update()
+                return
+            
+            # vẽ box mới
+            if self.drawing:
+                self.start_pos = pos_img
+                self.current_rect = QRect(pos_img, pos_img)
+                self.update()
+    # bắt đầu vẽ
     def mouseMoveEvent(self, event):
+        if not self.pixmap: 
+            return
+        
+        pos_img = self.map_to_image(event.pos())
+        # resize bbox
+        if self.resize_mode and self.selected_box is not None:
+            item = self.boxes[self.selected_box]
+            r = item["rect"]
+            if self.resize_mode == "tl":
+                r.setTopLeft(pos_img)
+            elif self.resize_mode == "tr":
+                r.setTopRight(pos_img)
+            elif self.resize_mode == "bl":
+                r.setBottomLeft(pos_img)
+            elif self.resize_mode == "br":
+                r.setBottomRight(pos_img)
+
+            item["rect"] = r.normalized()
+            self.update()
+            return
+
+        # draw box
+        if self.dragging and self.selected_box is not None:
+            item = self.boxes[self.selected_box]
+            r = item["rect"]
+            new_top_left = pos_img - self.drag_offset
+            item["rect"] = QRect(new_top_left, r.size())
+            self.update()
+            return
+
+        # draw new bbox realtime
         if self.start_pos:
-            end = self.map_to_image(event.pos())
-            self.current_rect = QRect(self.start_pos, end)
+            self.current_rect = QRect(self.start_pos, pos_img)
             self.update()
 
+    # event ket thuc 
     def mouseReleaseEvent(self, event):
+        if self.resize_mode:
+            self.resize_mode = None
+            return
+
+        if self.dragging:
+            self.dragging = False
+            return
+
         if self.current_rect:
             rect = self.current_rect.normalized()
             self.box_created.emit(rect)
 
         self.current_rect = None
         self.start_pos = None
-        # self.drawing = False
+        self.drawing = False
+        self.setCursor(Qt.ArrowCursor)
         self.update()
+
+    def mouseDoubleClickEvent(self, event):
+        if not self.pixmap:
+            return
+        pos_img = self.map_to_image(event.pos())
+        idx = self.find_box_at(pos_img)
+        if idx != -1:
+            self.box_double_clicked.emit(idx)
+
+        event.accept()
 
     def fit_to_window(self):
         if not self.pixmap:
@@ -148,10 +236,17 @@ class ImageCanvas(QWidget):
                 return
             
         if event.key() == Qt.Key_W:
-            # self.drawing = True
-            print("CREATE BOX MODE")
+            self.drawing = True
+            self.setCursor(Qt.CrossCursor)
+            print("LABEL MODE")
             return    
-
+        
+        if event.key() == Qt.Key_Delete:
+            if self.selected_box:
+                self.boxes.remove(self.selected_box)
+                self.selected_box = None
+                self.update()
+                return
         super().keyPressEvent(event)
 
     # vẽ 4 điểm góc
@@ -174,6 +269,28 @@ class ImageCanvas(QWidget):
                 size,
                 size
             )
+
+    # handle thay doi 4 diem goc phong to, thu nho
+    def detect_handle(self, pos_canvas, rect_canvas): 
+        size = 8
+        handles = {
+            "tl": QRect(rect_canvas.topLeft() - QPoint(size//2, size//2), QSize(size, size)),
+            "tr": QRect(rect_canvas.topRight() - QPoint(size//2, size//2), QSize(size, size)),
+            "bl": QRect(rect_canvas.bottomLeft() - QPoint(size//2, size//2), QSize(size, size)),
+            "br": QRect(rect_canvas.bottomRight() - QPoint(size//2, size//2), QSize(size, size)),
+        }
+
+        for k, r in handles.items():
+            if r.contains(pos_canvas):
+                return k
+        return None
+
+    # detect click bbox
+    def find_box_at(self, pos_img):
+        for item in range(len(self.boxes) -1, -1, -1):
+            if self.boxes[item]["rect"].contains(pos_img):
+                return item
+        return -1
 
     # ctrl zoom in, zoom out
     def wheelEvent(self, event):
