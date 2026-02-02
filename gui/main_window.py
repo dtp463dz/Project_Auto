@@ -73,10 +73,6 @@ class MainWindow(QMainWindow):
         status_layout.addStretch()
         status_layout.addWidget(self.image_info)
 
-        self.label_list = QListWidget()
-        self.label_list.itemClicked.connect(self.on_label_selected)
-
-
         # canvas
         self.canvas.setMinimumSize(800, 600)
         self.canvas.box_created.connect(self.on_box_created)
@@ -101,6 +97,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out.clicked.connect(self.canvas.zoom_out)
         self.btn_save.clicked.connect(self.save_label)
 
+        # control layout
         control_layout = QVBoxLayout()
         control_layout.addStretch()
         control_layout.addWidget(self.btn_ok)
@@ -113,14 +110,42 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.btn_save)
         control_layout.addStretch()
 
+        # label list 
+        self.label_list = QListWidget()
+        self.label_list.itemClicked.connect(self.on_label_selected)
+        # image list 
+        self.image_list = QListWidget()
+        self.image_list.itemClicked.connect(self.on_image_selected)
+        
+        self.label_list.setMinimumWidth(180)
+        self.image_list.setMinimumWidth(180)
+
+        # label layout
+        label_layout = QVBoxLayout()
+        label_layout.addWidget(QLabel("📌 Labels"))
+        label_layout.addWidget(self.label_list)
+        #image layout
+        image_layout = QVBoxLayout()
+        image_layout.addWidget(QLabel("Images"))
+        image_layout.addWidget(self.image_list)
+
+        right_panel = QVBoxLayout()
+        right_panel.addLayout(label_layout)
+        right_panel.addLayout(image_layout)
+
         # main layout 
         main_layout = QHBoxLayout()
         main_layout.addLayout(control_layout)
-        main_layout.addLayout(status_layout)
         main_layout.addWidget(self.canvas)
+        main_layout.addLayout(right_panel)
 
-        central_widget.setLayout(main_layout)
+        root_layout = QVBoxLayout()
+        root_layout.addLayout(status_layout)
+        root_layout.addLayout(main_layout)
+
+        central_widget.setLayout(root_layout)
         self.setCentralWidget(central_widget)
+        self.refresh_label_list()
 
     # MENU 
     def init_menu(self):
@@ -189,6 +214,9 @@ class MainWindow(QMainWindow):
             return
         
         self.current_images = images
+        self.image_list.clear()
+        for img in images:
+            self.image_list.addItem(os.path.basename(img))
         self.current_index = 0
         self.current_mode = "OK"
         self.model_label.setText("MODE: OK")
@@ -228,6 +256,7 @@ class MainWindow(QMainWindow):
             return
         self.canvas.load_image(self.current_images[self.current_index])
         self.image_info.setText(f"{self.current_index + 1} / {len(self.current_images)}")
+        self.image_list.setCurrentRow(self.current_index)
 
     def create_status_bar(self): 
         self.model_label = QLabel("MODE: NONE")
@@ -277,6 +306,19 @@ class MainWindow(QMainWindow):
         label_name = item.text()
         label_id = self.label_to_id[label_name]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
         self.canvas.set_label(label_id)
+
+    def on_image_selected(self, item):
+        name = item.text()
+        for i, path in enumerate(self.current_images):
+            if os.path.basename(path) == name:
+                self.current_index = i
+                self.update_image()
+                break
+
+    def refresh_label_list(self):
+        self.label_list.clear()
+        for name in self.labels:
+            self.label_list.addItem(str(name))
 
     def on_box_created(self, rect):
         dialog = SelectLabelDialog(self.labels)
@@ -343,6 +385,7 @@ class MainWindow(QMainWindow):
                 return
 
             self.labels.append(name)
+            self.refresh_label_list()
             label_id = len(self.labels) - 1
             item["label"] = label_id
             item["label_name"] = name
@@ -350,6 +393,7 @@ class MainWindow(QMainWindow):
         elif action == "edit":
             idx, new_name = result
             self.labels[idx] = new_name
+            self.refresh_label_list()
             # update tất cả bbox dùng label đó
             for b in self.canvas.boxes:
                 if b["label"] == idx:
@@ -367,6 +411,7 @@ class MainWindow(QMainWindow):
                 if b["label"] > del_index:
                     b["label"] -= 1
             self.labels.pop(del_index)
+            self.refresh_label_list()
             self.canvas.selected_box = None
         self.canvas.update()
 
