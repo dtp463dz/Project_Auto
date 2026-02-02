@@ -63,8 +63,9 @@ class ImageCanvas(QWidget):
         for item in self.boxes:
             rect = item["rect"]
             label_id = item["label"]
-            label_name = item.get("label_name", "")
+            label_name = str(item.get("label_name", ""))
             canvas_rect = self.map_to_canvas(rect)
+            painter.setBrush(Qt.NoBrush)
             if item.get("selected"):
                 pen = QPen(Qt.cyan, 2, Qt.DashLine)
             else:
@@ -110,12 +111,15 @@ class ImageCanvas(QWidget):
 
         if event.button() == Qt.LeftButton:
             if self.selected_box is not None:
-                item = self.boxes[self.selected_box]
-                rect_canvas = self.map_to_canvas(item["rect"])
-                handle = self.detect_handle(pos_canvas, rect_canvas)
-                if handle:
-                    self.resize_mode=handle
-                    return
+                if self.selected_box >= len(self.boxes):
+                    self.selected_box = None
+                else:
+                    item = self.boxes[self.selected_box]
+                    rect_canvas = self.map_to_canvas(item["rect"])
+                    handle = self.detect_handle(pos_canvas, rect_canvas)
+                    if handle:
+                        self.resize_mode=handle
+                        return
 
             # ưu tiên select box 
             idx = self.find_box_at(pos_img)
@@ -218,7 +222,6 @@ class ImageCanvas(QWidget):
         self.update()
 
     def keyPressEvent(self, event):
-        print("KEY:", event.key())
         if event.modifiers() & Qt.ControlModifier:
             if event.key() == Qt.Key_0:
                 self.fit_to_window()
@@ -242,9 +245,11 @@ class ImageCanvas(QWidget):
             return    
         
         if event.key() == Qt.Key_Delete:
-            if self.selected_box:
-                self.boxes.remove(self.selected_box)
+            if self.selected_box is not None:
+                if 0 <= self.selected_box < len(self.boxes):
+                    del self.boxes[self.selected_box]
                 self.selected_box = None
+                self.unsetCursor()
                 self.update()
                 return
         super().keyPressEvent(event)
