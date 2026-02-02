@@ -280,26 +280,29 @@ class MainWindow(QMainWindow):
 
     def on_box_created(self, rect):
         dialog = SelectLabelDialog(self.labels)
-
-        if dialog.exec_():
-            label_name = dialog.selected_label
-            if not label_name:
+        if not dialog.exec_():
+            return
+        action, result = dialog.get_result()
+        if action == "select":
+            if not isinstance(result, int):
+                print("BUG: select nhưng result = ", result, type(result))
                 return
-
-            if label_name not in self.label_to_id:
-                label_id = len(self.labels)
+            label_id = result
+            label_name = self.labels[label_id]
+        elif action == "new":
+            label_name = result
+            if label_name not in self.labels:
                 self.labels.append(label_name)
-                self.label_to_id[label_name] = label_id
-            else:
-                label_id = self.label_to_id[label_name]
-
-            self.canvas.boxes.append({
-                "label": label_id,
-                "label_name": label_name,
-                "rect" : rect
-            })
-
-            self.canvas.update()
+            label_id = self.labels.index(label_name)
+        else:
+            return
+        self.canvas.boxes.append({
+            "label": label_id,
+            "label_name": label_name,
+            "rect" : rect,
+            "selected": False
+        })
+        self.canvas.update()
 
     def save_label(self):
         h = self.canvas.pixmap.height()
@@ -325,11 +328,47 @@ class MainWindow(QMainWindow):
             self.labels,
             current = item["label"]
         )
-        if dialog.exec_():
-            label_id, label_name = dialog.get_result()
+        if not dialog.exec_():
+            return
+        
+        action, result = dialog.get_result()
+        if action == "select":
+            label_id = result
+            label_name = self.labels[label_id]
             item["label"] = label_id
             item["label_name"] = label_name
+        elif action == "new": 
+            name = result
+            if name in self.labels:
+                return
+
+            self.labels.append(name)
+            label_id = len(self.labels) - 1
+            item["label"] = label_id
+            item["label_name"] = name
             self.canvas.update()
+        elif action == "edit":
+            idx, new_name = result
+            self.labels[idx] = new_name
+            # update tất cả bbox dùng label đó
+            for b in self.canvas.boxes:
+                if b["label"] == idx:
+                    b["label_name"] = new_name
+        elif action == "delete":
+            del_index = result
+            # xóa bbox thuộc label đó
+            self.canvas.boxes = [
+                b for b in self.canvas.boxes
+                if b["label"] != del_index
+            ]
+
+            # update label id phía sau
+            for b in self.canvas.boxes:
+                if b["label"] > del_index:
+                    b["label"] -= 1
+            self.labels.pop(del_index)
+            self.canvas.selected_box = None
+        self.canvas.update()
 
     def auto_label(self):
         image_dir = DialogLib.select_image_folder(self)
