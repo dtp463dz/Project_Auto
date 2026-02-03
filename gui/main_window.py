@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         self.current_images = []
         self.current_mode = None 
 
-        self.init_menu()
+        # self.init_menu()
         self.init_ui()
 
     # UI
@@ -116,7 +116,6 @@ class MainWindow(QMainWindow):
         # image list 
         self.image_list = QListWidget()
         self.image_list.itemClicked.connect(self.on_image_selected)
-        
         self.label_list.setMinimumWidth(180)
         self.image_list.setMinimumWidth(180)
 
@@ -304,8 +303,18 @@ class MainWindow(QMainWindow):
 
     def on_label_selected(self, item):
         label_name = item.text()
-        label_id = self.label_to_id[label_name]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-        self.canvas.set_label(label_id)
+        if label_name not in self.labels:
+            return 
+        label_id = self.labels.index[label_name]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+        self.canvas.current_label = label_id
+        #highlight bbox theo label
+        for i, b in enumerate(self.canvas.boxes):
+            if b["label"] == label_id:
+                b["selected"] = True
+                self.canvas.selected_box = i
+            else:
+                b["selected"] = False
+        self.canvas.update()
 
     def on_image_selected(self, item):
         name = item.text()
@@ -316,9 +325,11 @@ class MainWindow(QMainWindow):
                 break
 
     def refresh_label_list(self):
+        self.label_list.blockSignals(True)
         self.label_list.clear()
         for name in self.labels:
             self.label_list.addItem(str(name))
+        self.label_list.blockSignals(False)
 
     def on_box_created(self, rect):
         dialog = SelectLabelDialog(self.labels)
