@@ -3,20 +3,26 @@ from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton
 class NewLabelDialog(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Create Label")
+        self.setWindowTitle("New Label")
         self.name = None
         layout = QVBoxLayout(self)
 
-        self.input = QLineEdit()
-        self.input.setPlaceholderText("Label name")
+        self.edit = QLineEdit()
+        self.edit.setPlaceholderText("Label name")
 
-        btn = QPushButton("Create")
-        btn.clicked.connect(self.accept_label)
-        layout.addWidget(self.input)
-        layout.addWidget(btn)
+        btn_ok = QPushButton("OK")
+        btn_cancel = QPushButton("Cancel")
 
-    def accept_label(self):
-        text = self.input.text().strip()
-        if text: 
-            self.name = text
-            self.accept()
+        btn_ok.clicked.connect(self.on_ok)
+        btn_cancel.clicked.connect(self.reject)
+
+        layout.addWidget(self.edit)
+        layout.addWidget(btn_ok)
+        layout.addWidget(btn_cancel)
+
+    def on_ok(self):
+        text = self.edit.text().strip()
+        if not text:
+            return 
+        self.name = text
+        self.accept()

@@ -294,18 +294,21 @@ class MainWindow(QMainWindow):
     def create_label(self):
         dialog = NewLabelDialog()
         if dialog.exec_(): 
-            name = dialog.name
+            name = dialog.name.strip()
+            if not name:
+                return
             if name not in self.label_to_id:
                 label_id = len(self.labels)
                 self.labels.append(name)
                 self.label_to_id[name] = label_id
-                self.label_list.addItem(name)
+                # self.label_list.addItem(name)
+                self.refresh_label_list()
 
     def on_label_selected(self, item):
         label_name = item.text()
         if label_name not in self.labels:
             return 
-        label_id = self.labels.index[label_name]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+        label_id = self.labels.index(label_name)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
         self.canvas.current_label = label_id
         #highlight bbox theo label
         for i, b in enumerate(self.canvas.boxes):
@@ -325,10 +328,13 @@ class MainWindow(QMainWindow):
                 break
 
     def refresh_label_list(self):
+        print("REFRESH LABEL LIST:", self.labels)
         self.label_list.blockSignals(True)
         self.label_list.clear()
-        for name in self.labels:
-            self.label_list.addItem(str(name))
+        self.label_to_id.clear()
+        for idx, name in enumerate(self.labels):
+            self.label_list.addItem(name)
+            self.label_to_id[name] = idx 
         self.label_list.blockSignals(False)
 
     def on_box_created(self, rect):
@@ -346,6 +352,7 @@ class MainWindow(QMainWindow):
             label_name = result
             if label_name not in self.labels:
                 self.labels.append(label_name)
+                self.refresh_label_list()
             label_id = self.labels.index(label_name)
         else:
             return
@@ -403,6 +410,13 @@ class MainWindow(QMainWindow):
             self.canvas.update()
         elif action == "edit":
             idx, new_name = result
+            new_name = new_name.strip()
+            if not new_name:
+                return
+            # check trùng tên label
+            if new_name in self.labels and self.labels[idx] != new_name:
+                QMessageBox.warning(self, "Error", "Label name already exists")
+                return
             self.labels[idx] = new_name
             self.refresh_label_list()
             # update tất cả bbox dùng label đó
