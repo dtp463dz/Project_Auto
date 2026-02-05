@@ -2,10 +2,10 @@ import os
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import (
-    QWidget, QPushButton, QLabel, QMainWindow, QMessageBox,
+    QWidget, QPushButton, QLabel, QMainWindow, QMessageBox, 
     QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtGui import QPixmap, QImage
 
 from libs.file_lib import FileLib
@@ -36,6 +36,8 @@ class MainWindow(QMainWindow):
         self.current_index = 0
         self.current_images = []
         self.current_mode = None 
+
+        self.labels_dir = None
 
         # self.init_menu()
         self.init_ui()
@@ -81,6 +83,7 @@ class MainWindow(QMainWindow):
         # control buttons 
         self.btn_ok = QPushButton("📂 OK Folder")
         self.btn_ng = QPushButton("📂 NG Folder")
+        self.btn_labels = QPushButton("📂 Labels Folder")
         self.btn_next = QPushButton("Next Image")
         self.btn_prev = QPushButton("Previous Image")
         self.btn_zoom_in = QPushButton("Zoom In")
@@ -90,6 +93,7 @@ class MainWindow(QMainWindow):
 
         self.btn_ok.clicked.connect(self.select_ok_folder)
         self.btn_ng.clicked.connect(self.select_ng_folder)
+        self.btn_labels.clicked.connect(self.select_labels_folder)
         self.btn_auto.clicked.connect(self.auto_label)
         self.btn_next.clicked.connect(self.next_image)
         self.btn_prev.clicked.connect(self.prev_image)
@@ -102,6 +106,7 @@ class MainWindow(QMainWindow):
         control_layout.addStretch()
         control_layout.addWidget(self.btn_ok)
         control_layout.addWidget(self.btn_ng)
+        control_layout.addWidget(self.btn_labels)
         control_layout.addWidget(self.btn_auto)
         control_layout.addWidget(self.btn_next)
         control_layout.addWidget(self.btn_prev)
@@ -207,6 +212,13 @@ class MainWindow(QMainWindow):
         if folder:
             self.load_ng_folder(folder)
 
+    def select_labels_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Labels Folder")
+        if not folder:
+            return
+        self.labels_dir = folder
+        self.statusBar().showMessage(f"Labels folder: {folder}")
+
     def load_ok_folder(self, folder):
         images = self.file_lib.load_images(folder)
         if not images:
@@ -281,7 +293,9 @@ class MainWindow(QMainWindow):
             return
         if self.current_index < len(self.current_images) - 1:
             self.current_index += 1
-            self.canvas.load_image(self.current_images[self.current_index])
+            image_path = self.current_images[self.current_index]
+            self.canvas.load_image(image_path)
+            self.load_label_file(image_path)
 
     def prev_image(self):
         if not self.current_images:
@@ -289,7 +303,9 @@ class MainWindow(QMainWindow):
             return
         if self.current_index > 0:
             self.current_index -= 1
-            self.canvas.load_image(self.current_images[self.current_index])
+            image_path = self.current_images[self.current_index]
+            self.canvas.load_image(image_path)
+            self.load_label_file(image_path)
 
     def create_label(self):
         dialog = NewLabelDialog()
@@ -325,6 +341,7 @@ class MainWindow(QMainWindow):
             if os.path.basename(path) == name:
                 self.current_index = i
                 self.update_image()
+                self.load_label_file(path)
                 break
 
     def refresh_label_list(self):
@@ -365,14 +382,25 @@ class MainWindow(QMainWindow):
         self.canvas.update()
 
     def save_label(self):
+        if not self.labels_dir:
+            QMessageBox.warning(
+                self,
+                "No Labels Folder",
+                "Please select Labels Folder first"
+            )
+            return
+        if not self.canvas.pixmap:
+            return
+
         h = self.canvas.pixmap.height()
         w = self.canvas.pixmap.width()
-        label_path = self.current_images[self.current_index]
-        label_path = label_path.replace("images", "labels").replace(".jpg", ".txt")
+        image_path = self.current_images[self.current_index]
+        image_name = os.path.splitext(os.path.basename(image_path))[0]
+        label_path = os.path.join(self.labels_dir, image_name + ".txt")
 
         with open(label_path, "w") as f:
             for item in self.canvas.boxes:
-                label = item["label"]
+                label = int(item["label"])
                 box = item["rect"]
 
                 x = (box.center().x()) / w
@@ -380,6 +408,57 @@ class MainWindow(QMainWindow):
                 bw = box.width() / w
                 bh = box.height() / h
                 f.write(f"{label} {x:.6f} {y:.6f} {bw:.6f} {bh:.6f}\n")
+        self.save_classes_file()
+        
+    def save_classes_file(self):
+        path = os.path.join(self.project_dir, "classes.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            for name in self.labels:
+                f.write(name + "\n")
+
+    def load_label_for_image(self, image_path):
+        img_name = os.path.splitext(os.path.basename(image_path))[0]
+        label_path = os.path.join(self.project_dir, "labels", img_name + ".txt")
+        self.canvas.boxes.clear()
+        if not os.path.exists(label_path):
+            return
+        img = self.canvas.pixmap
+        img_w = img.width()
+        img_h = img.height()
+
+        with open(label_path, "r") as f:
+            for line in f:
+                cls, xc, yc, w, h = line.strip().split()
+                cls = int(cls)
+                xc, yc, w, h = map(float, (xc, yc, w, h))
+                bw = w * img_w
+                bh = h * img_w
+                x = xc* img_w - bw / 2
+                y = xc * img_h - bh / 2
+
+                self.canvas.boxes.append({
+                    "label": cls,
+                    "label_name": self.labels[cls],
+                    "rect": QRect(int(x), int(y), int(bw), int(bh)),
+                    "selected": False
+                })
+        self.canvas.update()
+
+    def load_classes_file(self):
+        classes_path = os.path.join(self.labels_dir, "classes.txt")
+        if not os.path.exists(classes_path):
+            return
+        with open(classes_path, "r", encoding="utf-8") as f:
+            self.labels = [line.strip() for line in f if line.strip()]
+        self.refresh_label_list()
+
+    def load_predefined_classes(self):
+        path = os.path.join(self.project_dir, "data", "predefined_classes.txt")
+        if not os.path.exists(path):
+            return
+        with open(path, "r", encoding="utf-8") as f:
+            self.labels = [line.strip() for line in f if line.strip()]
+        self.refresh_label_list() 
 
     # edit label
     def on_edit_label(self, box_index):
@@ -438,6 +517,55 @@ class MainWindow(QMainWindow):
             self.labels.pop(del_index)
             self.refresh_label_list()
             self.canvas.selected_box = None
+        self.canvas.update()
+
+    # load label
+    def load_label_file(self, image_path):
+        self.canvas.boxes.clear()
+
+        if not self.labels_dir or not self.canvas.pixmap:
+            return
+        image_name = os.path.splitext(os.path.basename(image_path))[0]
+        label_path = os.path.join(self.labels_dir, image_name + ".txt")
+
+        if not os.path.exists(label_path):
+            self.canvas.update()
+            return
+        h = self.canvas.pixmap.height()
+        w = self.canvas.pixmap.width()
+
+        with open(label_path, "r") as f:
+            for line in f: 
+                parts = line.strip().split()
+                if len(parts) != 5:
+                    continue
+                label_id = int(parts[0])
+                x, y, bw, bh = map(float, parts[1:])
+
+                cx = x * w
+                cy = y * h
+                rw = bw * w
+                rh = bh * h
+
+                rect = QRect(
+                    int(cx - rw / 2),
+                    int(cy - rh / 2),
+                    int(rw),
+                    int(rh)
+                )
+
+                label_name = (
+                    self.labels[label_id]
+                    if label_id < len(self.labels)
+                    else str(label_id)
+                )
+
+                self.canvas.boxes.append({
+                    "label": label_id,
+                    "label_name": label_name,
+                    "rect": rect,
+                    "selected": False
+                })
         self.canvas.update()
 
     def auto_label(self):
