@@ -17,7 +17,8 @@ from dialog.dialog_lib import DialogLib
 from dialog.select_label_dialog import SelectLabelDialog
 from logic.auto_label_logic import AutoLabelLogic
 from dialog.new_label_dialog import NewLabelDialog
-
+from gui.logger import setup_logger
+log = setup_logger()
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -206,11 +207,15 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Select OK Folder")
         if folder:
             self.load_ok_folder(folder)
+            log.info(f"Select OK images folder: {folder}")
+            log.info(f"Total images loaded: {len(self.current_images)}")
 
     def select_ng_folder(self): 
         folder = QFileDialog.getExistingDirectory(self, "Select NG Folder")
         if folder:
             self.load_ng_folder(folder)
+            log.info(f"Select NG images folder: {folder}")
+            log.info(f"Total images loaded: {len(self.current_images)}")
 
     def select_labels_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Labels Folder")
@@ -219,6 +224,7 @@ class MainWindow(QMainWindow):
         self.labels_dir = folder
         self.load_classes_file()
         self.statusBar().showMessage(f"Labels folder: {folder}")
+        log.info(f"Select labels folder: {self.labels_dir}")
 
     def load_ok_folder(self, folder):
         images = self.file_lib.load_images(folder)
@@ -269,6 +275,7 @@ class MainWindow(QMainWindow):
         self.canvas.load_image(self.current_images[self.current_index])
         self.image_info.setText(f"{self.current_index + 1} / {len(self.current_images)}")
         self.image_list.setCurrentRow(self.current_index)
+        log.info(f"Load image: {self.current_images[self.current_index]}")
 
     def create_status_bar(self): 
         self.model_label = QLabel("MODE: NONE")
@@ -380,6 +387,10 @@ class MainWindow(QMainWindow):
             "selected": False
         })
         self.canvas.update()
+        log.info(
+            f"Create bbox | label={label_id}({label_name})"
+            f"rect={rect.x()}, {rect.width()}, {rect.height()}"
+        )
 
     def save_label(self):
         if not self.labels_dir:
@@ -409,6 +420,9 @@ class MainWindow(QMainWindow):
                 bh = box.height() / h
                 f.write(f"{label} {x:.6f} {y:.6f} {bw:.6f} {bh:.6f}\n")
         self.save_classes_file()
+        log.info(f"Save label file: {label_path}")
+        log.info(f"Total boxes saved: {len(self.canvas.boxes)}")
+
         
     def save_classes_file(self):
         path = os.path.join(self.project_dir, "classes.txt")
@@ -419,9 +433,12 @@ class MainWindow(QMainWindow):
     def load_classes_file(self):
         classes_path = os.path.join(self.labels_dir, "classes.txt")
         if not os.path.exists(classes_path):
+            log.info("classes.txt not found, start with empty labels")
             return
         with open(classes_path, "r", encoding="utf-8") as f:
             self.labels = [line.strip() for line in f if line.strip()]
+        log.info(f"Load classes file: {classes_path}")
+        log.info(f"Classes: {self.labels}")
         self.refresh_label_list()
 
     def load_predefined_classes(self):
@@ -490,6 +507,9 @@ class MainWindow(QMainWindow):
             self.refresh_label_list()
             self.canvas.selected_box = None
         self.canvas.update()
+        log.info(f"Edit label on box index={box_index}")
+        log.info(f"Action={action}, Result={result}")
+
 
     # load label
     def load_label_file(self, image_path):

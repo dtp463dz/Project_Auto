@@ -1,0 +1,6 @@
+[2026-02-06 23:17:32][INFO] Load image: C:/Users/happy_dinh/Desktop/2/images\1.jpg
+[2026-02-06 23:17:32][INFO] Select OK images folder: C:/Users/happy_dinh/Desktop/2/images
+[2026-02-06 23:17:32][INFO] Total images loaded: 30
+[2026-02-06 23:17:36][INFO] Load classes file: C:/Users/happy_dinh/Desktop/2/labels\classes.txt
+[2026-02-06 23:17:36][INFO] Classes: ['aOK', 'bOK', 'cOK', 'dOK', 'eOK', 'fOK', 'gOK', 'aNG', 'bNG', 'cNG', 'dNG', 'eNG', 'fNG', 'gNG']
+[2026-02-06 23:17:36][INFO] Select labels folder: C:/Users/happy_dinh/Desktop/2/labels

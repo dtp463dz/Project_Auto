@@ -2,6 +2,8 @@ from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor
 from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize
 import colorsys
+from gui.logger import setup_logger
+log = setup_logger()
 
 class ImageCanvas(QWidget):
     box_created = pyqtSignal(QRect)
@@ -251,6 +253,7 @@ class ImageCanvas(QWidget):
                 self.selected_box = None
                 self.unsetCursor()
                 self.update()
+                log.info(f"Delete bbox index={self.selected_box}")
                 return
         super().keyPressEvent(event)
 
