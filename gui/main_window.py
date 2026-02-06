@@ -217,6 +217,7 @@ class MainWindow(QMainWindow):
         if not folder:
             return
         self.labels_dir = folder
+        self.load_classes_file()
         self.statusBar().showMessage(f"Labels folder: {folder}")
 
     def load_ok_folder(self, folder):
@@ -345,7 +346,6 @@ class MainWindow(QMainWindow):
                 break
 
     def refresh_label_list(self):
-        print("REFRESH LABEL LIST:", self.labels)
         self.label_list.blockSignals(True)
         self.label_list.clear()
         self.label_to_id.clear()
@@ -415,34 +415,6 @@ class MainWindow(QMainWindow):
         with open(path, "w", encoding="utf-8") as f:
             for name in self.labels:
                 f.write(name + "\n")
-
-    def load_label_for_image(self, image_path):
-        img_name = os.path.splitext(os.path.basename(image_path))[0]
-        label_path = os.path.join(self.project_dir, "labels", img_name + ".txt")
-        self.canvas.boxes.clear()
-        if not os.path.exists(label_path):
-            return
-        img = self.canvas.pixmap
-        img_w = img.width()
-        img_h = img.height()
-
-        with open(label_path, "r") as f:
-            for line in f:
-                cls, xc, yc, w, h = line.strip().split()
-                cls = int(cls)
-                xc, yc, w, h = map(float, (xc, yc, w, h))
-                bw = w * img_w
-                bh = h * img_w
-                x = xc* img_w - bw / 2
-                y = xc * img_h - bh / 2
-
-                self.canvas.boxes.append({
-                    "label": cls,
-                    "label_name": self.labels[cls],
-                    "rect": QRect(int(x), int(y), int(bw), int(bh)),
-                    "selected": False
-                })
-        self.canvas.update()
 
     def load_classes_file(self):
         classes_path = os.path.join(self.labels_dir, "classes.txt")
