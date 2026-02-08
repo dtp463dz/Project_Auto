@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor
+from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor, QCursor
 from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize
 import colorsys
 from gui.logger import setup_logger
@@ -62,29 +62,34 @@ class ImageCanvas(QWidget):
         self.offset = QPoint(x, y)
         painter.drawPixmap(x, y, scaled)
 
-        for item in self.boxes:
+        for idx, item in enumerate(self.boxes):
             rect = item["rect"]
             label_id = item["label"]
             label_name = str(item.get("label_name", ""))
             canvas_rect = self.map_to_canvas(rect)
-            painter.setBrush(Qt.NoBrush)
-            if item.get("selected"):
-                pen = QPen(Qt.cyan, 2, Qt.DashLine)
+            color = self.get_label_color(label_id)
+            if self.selected_box == idx: 
+                pen = QPen(Qt.white, 2)
+            elif self.current_label is not None and label_id == self.current_label:
+                pen = QPen(color, 2)
             else:
-                pen = QPen(self.get_label_color(label_id), 2)
-
+                pen = QPen(color, 1)
+            
+            pen.setStyle(Qt.SolidLine)
+            pen.setCosmetic(True)
             painter.setPen(pen)
             painter.drawRect(canvas_rect)
+            if self.selected_box == idx:
+                self.draw_handles(painter, canvas_rect, color)
+
             if label_name:
                 painter.drawText(canvas_rect.topLeft() + QPoint(3, -3), label_name)
-
-            if item.get("selected"):
-                self.draw_handles(painter, canvas_rect)
 
         # drawing bbox(realtime)
         if self.current_rect: 
             canvas_rect = self.map_to_canvas(self.current_rect.normalized())
-            pen = QPen(Qt.yellow, 2, Qt.DashLine)
+            pen = QPen(Qt.red, 1, Qt.SolidLine)
+            pen.setCosmetic(True)
             painter.setPen(pen)
             painter.drawRect(canvas_rect)
             self.draw_handles(painter, canvas_rect)
@@ -130,6 +135,9 @@ class ImageCanvas(QWidget):
                 for b in self.boxes:
                     b["selected"] = False
                 self.boxes[idx]["selected"] = True
+                # đổi cursor theo label
+                self.set_label_cursor(self.boxes[idx]["label"])
+                self.current_label = self.boxes[idx]["label"]
                 self.dragging = True
                 self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
                 self.setCursor(Qt.SizeAllCursor)
@@ -242,8 +250,11 @@ class ImageCanvas(QWidget):
             
         if event.key() == Qt.Key_W:
             self.drawing = True
-            self.setCursor(Qt.CrossCursor)
-            print("LABEL MODE")
+            if self.current_label is not None:
+                self.set_label_cursor(self.current_label)
+            else:
+                self.setCursor(Qt.CrossCursor)
+            print("Label Mode")
             return    
         
         if event.key() == Qt.Key_Delete:
@@ -258,8 +269,8 @@ class ImageCanvas(QWidget):
         super().keyPressEvent(event)
 
     # vẽ 4 điểm góc
-    def draw_handles(self, painter, rect):
-        size = 6
+    def draw_handles(self, painter, rect, color):
+        size = 4
         half = size // 2
         points = [
             rect.topLeft(),
@@ -268,8 +279,8 @@ class ImageCanvas(QWidget):
             rect.bottomRight()
         ]
 
-        painter.setBrush(QColor(255, 255, 255))
-        painter.setPen(QPen(Qt.black, 1))
+        painter.setBrush(color)
+        painter.setPen(QPen(color, 1))
         for p in points:
             painter.drawRect(
                 p.x() - half,
@@ -327,3 +338,18 @@ class ImageCanvas(QWidget):
         color = QColor()
         color.setHsv(hue, 255, 200)
         return color
+    
+    #cursor màu
+    def set_label_cursor(self, label_id):
+        color = self.get_label_color(label_id)
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        pen = QPen(color)
+        pen.setWidth(2)
+        painter.setPen(pen)
+        # vẽ dấu +
+        painter.drawLine(8, 0, 8, 16)
+        painter.drawLine(0, 8, 16, 8)
+        painter.end()
+        self.setCursor(QCursor(pixmap))

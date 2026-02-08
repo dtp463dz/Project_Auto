@@ -334,13 +334,17 @@ class MainWindow(QMainWindow):
             return 
         label_id = self.labels.index(label_name)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
         self.canvas.current_label = label_id
+        self.canvas.set_label_cursor(label_id)
         #highlight bbox theo label
-        for i, b in enumerate(self.canvas.boxes):
-            if b["label"] == label_id:
-                b["selected"] = True
-                self.canvas.selected_box = i
-            else:
-                b["selected"] = False
+        # for i, b in enumerate(self.canvas.boxes):
+        #     if b["label"] == label_id:
+        #         b["selected"] = True
+        #         self.canvas.selected_box = i
+        #     else:
+        #         b["selected"] = False
+        self.canvas.selected_box = None
+        for b in self.canvas.boxes:
+            b["selected"] = (b["label"] == label_id)
         self.canvas.update()
 
     def on_image_selected(self, item):
@@ -360,6 +364,19 @@ class MainWindow(QMainWindow):
             self.label_list.addItem(name)
             self.label_to_id[name] = idx 
         self.label_list.blockSignals(False)
+
+    def refresh_label_list_from_boxes(self): 
+        self.label_list.blockSignals(True)
+        self.label_list.clear()
+
+        used_label_ids = sorted({
+            b["label"] for b in self.canvas.boxes
+            if 0 <= b["label"] < len(self.labels)
+        })
+        for lid in used_label_ids:
+            self.label_list.addItem(self.labels[lid])
+        self.label_list.blockSignals(False)
+        
 
     def on_box_created(self, rect):
         dialog = SelectLabelDialog(self.labels)
@@ -559,6 +576,7 @@ class MainWindow(QMainWindow):
                     "selected": False
                 })
         self.canvas.update()
+        self.refresh_label_list_from_boxes()
 
     def auto_label(self):
         image_dir = DialogLib.select_image_folder(self)
