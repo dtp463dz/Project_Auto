@@ -272,10 +272,14 @@ class MainWindow(QMainWindow):
     def update_image(self):
         if not self.current_images:
             return
-        self.canvas.load_image(self.current_images[self.current_index])
+        image_path = self.current_images[self.current_index]
+        self.canvas.load_image(image_path)
+        self.load_label_file(image_path)
         self.image_info.setText(f"{self.current_index + 1} / {len(self.current_images)}")
+        self.image_list.blockSignals(True)
         self.image_list.setCurrentRow(self.current_index)
-        log.info(f"Load image: {self.current_images[self.current_index]}")
+        self.image_list.blockSignals(False)
+        log.info(f"Load image: {image_path}")
 
     def create_status_bar(self): 
         self.model_label = QLabel("MODE: NONE")
@@ -301,9 +305,7 @@ class MainWindow(QMainWindow):
             return
         if self.current_index < len(self.current_images) - 1:
             self.current_index += 1
-            image_path = self.current_images[self.current_index]
-            self.canvas.load_image(image_path)
-            self.load_label_file(image_path)
+            self.update_image()
 
     def prev_image(self):
         if not self.current_images:
@@ -311,9 +313,7 @@ class MainWindow(QMainWindow):
             return
         if self.current_index > 0:
             self.current_index -= 1
-            image_path = self.current_images[self.current_index]
-            self.canvas.load_image(image_path)
-            self.load_label_file(image_path)
+            self.update_image()
 
     def create_label(self):
         dialog = NewLabelDialog()
@@ -330,21 +330,13 @@ class MainWindow(QMainWindow):
 
     def on_label_selected(self, item):
         label_name = item.text()
-        if label_name not in self.labels:
-            return 
-        label_id = self.labels.index(label_name)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-        self.canvas.current_label = label_id
-        self.canvas.set_label_cursor(label_id)
-        #highlight bbox theo label
-        # for i, b in enumerate(self.canvas.boxes):
-        #     if b["label"] == label_id:
-        #         b["selected"] = True
-        #         self.canvas.selected_box = i
-        #     else:
-        #         b["selected"] = False
-        self.canvas.selected_box = None
+        if label_name not in self.label_to_id:
+            return
+        bbox_index = self.label_to_id[label_name]
         for b in self.canvas.boxes:
-            b["selected"] = (b["label"] == label_id)
+            b["selected"] = False
+        self.canvas.boxes[bbox_index]["selected"] = True
+        self.canvas.selected_box = bbox_index
         self.canvas.update()
 
     def on_image_selected(self, item):
@@ -368,13 +360,16 @@ class MainWindow(QMainWindow):
     def refresh_label_list_from_boxes(self): 
         self.label_list.blockSignals(True)
         self.label_list.clear()
+        self.label_to_id.clear()
 
-        used_label_ids = sorted({
-            b["label"] for b in self.canvas.boxes
-            if 0 <= b["label"] < len(self.labels)
-        })
-        for lid in used_label_ids:
-            self.label_list.addItem(self.labels[lid])
+        for idx, box in enumerate(self.canvas.boxes):
+            label_id = box["label"]
+            if 0 <= label_id < len(self.labels):
+                name = self.labels[label_id]
+                # them index phan biet
+                display_text = f"{name}"
+                self.label_list.addItem(display_text)
+                self.label_to_id[display_text] = idx
         self.label_list.blockSignals(False)
         
 
@@ -442,10 +437,13 @@ class MainWindow(QMainWindow):
 
         
     def save_classes_file(self):
-        path = os.path.join(self.project_dir, "classes.txt")
+        if not self.labels_dir:
+            return
+        path = os.path.join(self.labels_dir, "classes.txt")
         with open(path, "w", encoding="utf-8") as f:
             for name in self.labels:
                 f.write(name + "\n")
+        log.info(f"Saved classes file: {path}")
 
     def load_classes_file(self):
         classes_path = os.path.join(self.labels_dir, "classes.txt")
@@ -459,7 +457,7 @@ class MainWindow(QMainWindow):
         self.refresh_label_list()
 
     def load_predefined_classes(self):
-        path = os.path.join(self.project_dir, "data", "predefined_classes.txt")
+        path = os.path.join(self.labels_dir, "data", "predefined_classes.txt")
         if not os.path.exists(path):
             return
         with open(path, "r", encoding="utf-8") as f:
@@ -575,8 +573,8 @@ class MainWindow(QMainWindow):
                     "rect": rect,
                     "selected": False
                 })
-        self.canvas.update()
         self.refresh_label_list_from_boxes()
+        self.canvas.update()
 
     def auto_label(self):
         image_dir = DialogLib.select_image_folder(self)

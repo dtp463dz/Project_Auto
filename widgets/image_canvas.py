@@ -88,11 +88,15 @@ class ImageCanvas(QWidget):
         # drawing bbox(realtime)
         if self.current_rect: 
             canvas_rect = self.map_to_canvas(self.current_rect.normalized())
-            pen = QPen(Qt.red, 1, Qt.SolidLine)
+            if self.current_label is not None:
+                color = self.get_label_color(self.current_label)
+            else:
+                color = Qt.red
+            pen = QPen(color, 1, Qt.SolidLine)
             pen.setCosmetic(True)
             painter.setPen(pen)
             painter.drawRect(canvas_rect)
-            self.draw_handles(painter, canvas_rect)
+            self.draw_handles(painter, canvas_rect, color)
     
 
     def map_to_image(self, pos):
