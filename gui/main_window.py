@@ -4,10 +4,10 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QLabel, QMainWindow, QMessageBox, 
     QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget,
-    QListWidgetItem
+    QListWidgetItem, QShortcut
 )
 from PyQt5.QtCore import Qt, QRect
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QKeySequence
 
 from libs.file_lib import FileLib
 from libs.edit_lib import EditLib
@@ -40,6 +40,8 @@ class MainWindow(QMainWindow):
         self.current_mode = None 
 
         self.labels_dir = None
+        self.dirty = False
+        QShortcut(QKeySequence("Ctrl+S"), self, self.save_label)
 
         # self.init_menu()
         self.init_ui()
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
         # canvas
         self.canvas.setMinimumSize(800, 600)
         self.canvas.box_created.connect(self.on_box_created)
+        self.canvas.box_created.connect(self.on_boxes_changed)
         self.canvas.box_double_clicked.connect(self.on_edit_label)
 
         # control buttons 
@@ -276,11 +279,26 @@ class MainWindow(QMainWindow):
         image_path = self.current_images[self.current_index]
         self.canvas.load_image(image_path)
         self.load_label_file(image_path)
+        self.dirty = False
+        self.update_window_title()
         self.image_info.setText(f"{self.current_index + 1} / {len(self.current_images)}")
         self.image_list.blockSignals(True)
         self.image_list.setCurrentRow(self.current_index)
         self.image_list.blockSignals(False)
         log.info(f"Load image: {image_path}")
+
+    def update_window_title(self):
+        if not self.current_images:
+            self.setWindowTitle("Label Tool")
+            return
+        image_name = os.path.basename(
+            self.current_images[self.current_index]
+        )
+        if self.dirty:
+            title = f"{image_name} *"
+        else:
+            title = image_name
+        self.setWindowTitle(title)
 
     def create_status_bar(self): 
         self.model_label = QLabel("MODE: NONE")
@@ -301,16 +319,22 @@ class MainWindow(QMainWindow):
         self.image_info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
     def next_image(self):
+        
         if not self.current_images:
             print('next fail')
+            return
+        if not self.check_unsaved():
             return
         if self.current_index < len(self.current_images) - 1:
             self.current_index += 1
             self.update_image()
 
     def prev_image(self):
+        
         if not self.current_images:
             print('prev fail')
+            return
+        if not self.check_unsaved():
             return
         if self.current_index > 0:
             self.current_index -= 1
@@ -344,6 +368,8 @@ class MainWindow(QMainWindow):
         print("Selected from list: ", bbox_index)
 
     def on_image_selected(self, item):
+        if not self.check_unsaved():
+            return
         name = item.text()
         for i, path in enumerate(self.current_images):
             if os.path.basename(path) == name:
@@ -404,11 +430,41 @@ class MainWindow(QMainWindow):
             "rect" : rect,
             "selected": False
         })
+        self.dirty = True
+        self.update_window_title()
         self.canvas.update()
         log.info(
             f"Create bbox | label={label_id}({label_name})"
             f"rect={rect.x()}, {rect.width()}, {rect.height()}"
         )
+
+    def on_boxes_changed(self):
+        self.dirty = True
+        self.setWindowTitle("*" + self.windowTitle().lstrip("*"))
+        print("DIRTY = True")
+    
+    def check_unsaved(self):
+        if not self.dirty:
+            return True
+        
+        reply = QMessageBox.question(
+            self, 
+            "Unsaved Changes",
+            "Save changes to current image?",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, 
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.Yes:
+            self.save_label()
+            self.dirty = False
+            return True
+        elif reply == QMessageBox.No:
+            self.dirty = False
+            self.update_window_title()
+            return True
+        else:
+            return False
 
     def save_label(self):
         if not self.labels_dir:
@@ -438,6 +494,8 @@ class MainWindow(QMainWindow):
                 bh = box.height() / h
                 f.write(f"{label} {x:.6f} {y:.6f} {bw:.6f} {bh:.6f}\n")
         self.save_classes_file()
+        self.dirty = False
+        self.update_window_title()
         log.info(f"Save label file: {label_path}")
         log.info(f"Total boxes saved: {len(self.canvas.boxes)}")
 
