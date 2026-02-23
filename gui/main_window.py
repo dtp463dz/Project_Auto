@@ -3,7 +3,8 @@ import cv2
 import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QLabel, QMainWindow, QMessageBox, 
-    QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget
+    QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget,
+    QListWidgetItem
 )
 from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtGui import QPixmap, QImage
@@ -329,15 +330,18 @@ class MainWindow(QMainWindow):
                 self.refresh_label_list()
 
     def on_label_selected(self, item):
-        label_name = item.text()
-        if label_name not in self.label_to_id:
+        bbox_index = item.data(Qt.UserRole)
+        if bbox_index is None:
             return
-        bbox_index = self.label_to_id[label_name]
-        for b in self.canvas.boxes:
-            b["selected"] = False
-        self.canvas.boxes[bbox_index]["selected"] = True
+        if bbox_index >= len(self.canvas.boxes):
+            return
+        
         self.canvas.selected_box = bbox_index
+        label_id = self.canvas.boxes[bbox_index]["label"]
+        self.canvas.current_label = label_id
+        self.canvas.set_label_cursor(label_id)
         self.canvas.update()
+        print("Selected from list: ", bbox_index)
 
     def on_image_selected(self, item):
         name = item.text()
@@ -360,16 +364,18 @@ class MainWindow(QMainWindow):
     def refresh_label_list_from_boxes(self): 
         self.label_list.blockSignals(True)
         self.label_list.clear()
-        self.label_to_id.clear()
 
         for idx, box in enumerate(self.canvas.boxes):
             label_id = box["label"]
-            if 0 <= label_id < len(self.labels):
-                name = self.labels[label_id]
-                # them index phan biet
-                display_text = f"{name}"
-                self.label_list.addItem(display_text)
-                self.label_to_id[display_text] = idx
+            if label_id < len(self.labels):
+                label_name = self.labels[label_id]
+            else:
+                label_name = str(label_id)
+
+            item = QListWidgetItem(label_name)
+            item.setData(Qt.UserRole, idx)
+            self.label_list.addItem(item)
+
         self.label_list.blockSignals(False)
         
 

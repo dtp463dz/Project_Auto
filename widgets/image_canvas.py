@@ -70,14 +70,17 @@ class ImageCanvas(QWidget):
             color = self.get_label_color(label_id)
             if self.selected_box == idx: 
                 pen = QPen(Qt.white, 2)
-            elif self.current_label is not None and label_id == self.current_label:
-                pen = QPen(color, 2)
+                fill = QColor(color)
+                fill.setAlpha(120)
             else:
                 pen = QPen(color, 1)
+                fill = QColor(color)
+                fill.setAlpha(40)
             
             pen.setStyle(Qt.SolidLine)
             pen.setCosmetic(True)
             painter.setPen(pen)
+            painter.setBrush(fill)
             painter.drawRect(canvas_rect)
             if self.selected_box == idx:
                 self.draw_handles(painter, canvas_rect, color)
@@ -121,33 +124,22 @@ class ImageCanvas(QWidget):
         pos_img = self.map_to_image(pos_canvas)
 
         if event.button() == Qt.LeftButton:
-            if self.selected_box is not None:
-                if self.selected_box >= len(self.boxes):
-                    self.selected_box = None
-                else:
-                    item = self.boxes[self.selected_box]
-                    rect_canvas = self.map_to_canvas(item["rect"])
-                    handle = self.detect_handle(pos_canvas, rect_canvas)
-                    if handle:
-                        self.resize_mode=handle
-                        return
-
-            # ưu tiên select box 
+            self.resize_mode = None
             idx = self.find_box_at(pos_img)
+
             if idx != -1:
                 self.selected_box = idx
-                for b in self.boxes:
-                    b["selected"] = False
-                self.boxes[idx]["selected"] = True
-                # đổi cursor theo label
-                self.set_label_cursor(self.boxes[idx]["label"])
-                self.current_label = self.boxes[idx]["label"]
                 self.dragging = True
                 self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
-                self.setCursor(Qt.SizeAllCursor)
+                self.current_label = self.boxes[idx]["label"]
+                self.set_label_cursor(self.current_label)
                 self.update()
+                print("Selected box:", idx)
                 return
-            
+            if idx == -1:
+                self.selected_box = None
+                self.update()
+
             # vẽ box mới
             if self.drawing:
                 self.start_pos = pos_img
@@ -177,7 +169,7 @@ class ImageCanvas(QWidget):
             return
 
         # draw box
-        if self.dragging and self.selected_box is not None:
+        if self.dragging and self.selected_box is not None and self.selected_box < len(self.boxes):
             item = self.boxes[self.selected_box]
             r = item["rect"]
             new_top_left = pos_img - self.drag_offset
@@ -192,13 +184,8 @@ class ImageCanvas(QWidget):
 
     # event ket thuc 
     def mouseReleaseEvent(self, event):
-        if self.resize_mode:
-            self.resize_mode = None
-            return
-
-        if self.dragging:
-            self.dragging = False
-            return
+        self.resize_mode = None
+        self.dragging = False
 
         if self.current_rect:
             rect = self.current_rect.normalized()
