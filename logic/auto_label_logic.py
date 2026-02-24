@@ -17,10 +17,18 @@ class AutoLabelLogic:
             self.model = YOLO(model_path)
 
     def run(self, image_dir, model_path, label_dir, conf = 0.7):
+
         if not os.path.exists(label_dir):
             os.makedirs(label_dir)
 
         self.load_model(model_path)
+
+        # tạo classes nếu không có 
+        classes_path = os.path.join(label_dir, "classes.txt")
+        if not os.path.exists(classes_path):
+            with open(classes_path, "w", encoding="utf-8") as f:
+                for i in range(len(self.model.names)):
+                    f.write(self.model.names[i] + "\n")
         images = [
             f for f in os.listdir(image_dir)
             if f.lower().endswith((".jpg", ".png", ".jpeg"))
