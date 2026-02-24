@@ -32,29 +32,11 @@ class ImageCanvas(QWidget):
         self.pixmap = QPixmap(path)
         if self.pixmap.isNull():
             return
-        img_w =self.pixmap.width()
-        img_h = self.pixmap.height()
-        canvas_w = self.width()
-        canvas_h = self.height()
-        
-        if canvas_w == 0 or canvas_h == 0:
-            self.scale = 1.0
-        else: 
-            self.scale = min(canvas_w / img_w, canvas_h / img_h)
-
-        #center image
-        scaled_w = img_w * self.scale
-        scaled_h = img_h * self.scale
-        offset_x = (canvas_w - scaled_w) / 2
-        offset_y = (canvas_h - scaled_h) / 2
-        self.offset = QPoint(int(offset_x), int(offset_y))
-
+        self.scale = self.fit_scale()
+        self.center_image()
         self.boxes.clear()
         self.current_rect = None
         self.start_pos = None
-        self.selected_box = None
-        self.dragging = False
-        self.resize_mode = None
         self.update()
 
     def paintEvent(self, event):
@@ -332,20 +314,20 @@ class ImageCanvas(QWidget):
             old_pos = self.map_to_image(mouse_pos)
             zoom_factor = 1.25
             min_scale = self.fit_scale()
-            max_scale = min_scale * 20
 
             if event.angleDelta().y() > 0:
-                new_scale = self.scale * zoom_factor
-                if new_scale > max_scale:
-                    new_scale = max_scale
+                self.scale *= zoom_factor
+                
             else:
                 new_scale = self.scale / zoom_factor
-                if new_scale < min_scale:
-                    new_scale = min_scale
-
-            if new_scale == self.scale:
-                return
-            self.scale = new_scale
+                if new_scale <= min_scale:
+                    self.scale = min_scale
+                    self.center_image()
+                    self.update()
+                    return
+                else:
+                    self.scale = new_scale
+            
             new_pos = self.map_to_image(mouse_pos)
             delta = new_pos - old_pos
             self.offset += QPointF(
@@ -425,4 +407,17 @@ class ImageCanvas(QWidget):
         max_y = 0
         self.offset.setX(max(min_x, min(self.offset.x(), max_x)))
         self.offset.setY(max(min_y, min(self.offset.y(), max_y)))
+    
+    def center_image(self):
+        if not self.pixmap:
+            return
+        scaled_w = self.pixmap.width() * self.scale
+        scaled_h = self.pixmap.height() * self.scale
+        canvas_w = self.width()
+        canvas_h = self.height()
+        self.offset = QPointF(
+            (canvas_w - scaled_w) / 2,
+            (canvas_h - scaled_h) / 2
+        )
+        
         
