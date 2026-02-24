@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor, QCursor
-from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize
+from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize, QPointF, QRectF
 import colorsys
 from gui.logger import setup_logger
 log = setup_logger()
@@ -25,6 +25,8 @@ class ImageCanvas(QWidget):
         self.offset = QPoint(0, 0)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.panning = False
+        self.last_pan_pos = None
 
     def load_image(self, path):
         self.pixmap = QPixmap(path)
@@ -40,10 +42,19 @@ class ImageCanvas(QWidget):
         else: 
             self.scale = min(canvas_w / img_w, canvas_h / img_h)
 
+        #center image
+        scaled_w = img_w * self.scale
+        scaled_h = img_h * self.scale
+        offset_x = (canvas_w - scaled_w) / 2
+        offset_y = (canvas_h - scaled_h) / 2
+        self.offset = QPoint(int(offset_x), int(offset_y))
+
         self.boxes.clear()
         self.current_rect = None
         self.start_pos = None
-        self.offset = QPoint(0, 0)
+        self.selected_box = None
+        self.dragging = False
+        self.resize_mode = None
         self.update()
 
     def paintEvent(self, event):
@@ -52,54 +63,48 @@ class ImageCanvas(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHints(QPainter.Antialiasing)
-        scaled = self.pixmap.scaled(
-            self.pixmap.size() * self.scale,
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
-        )
-        x = (self.width() - scaled.width()) // 2
-        y = (self.height() - scaled.height()) // 2
-        self.offset = QPoint(x, y)
-        painter.drawPixmap(x, y, scaled)
+        
+        painter.translate(self.offset)
+        painter.scale(self.scale, self.scale)
+
+        painter.drawPixmap(0, 0, self.pixmap)
 
         for idx, item in enumerate(self.boxes):
             rect = item["rect"]
             label_id = item["label"]
             label_name = str(item.get("label_name", ""))
-            canvas_rect = self.map_to_canvas(rect)
+            # canvas_rect = self.map_to_canvas(rect)
             color = self.get_label_color(label_id)
             if self.selected_box == idx: 
-                pen = QPen(Qt.white, 2)
+                pen = QPen(Qt.white, 2 / self.scale)
                 fill = QColor(color)
                 fill.setAlpha(120)
             else:
-                pen = QPen(color, 1)
+                pen = QPen(color, 1 / self.scale)
                 fill = QColor(color)
                 fill.setAlpha(40)
             
-            pen.setStyle(Qt.SolidLine)
-            pen.setCosmetic(True)
+            pen.setCosmetic(False)
             painter.setPen(pen)
             painter.setBrush(fill)
-            painter.drawRect(canvas_rect)
+            painter.drawRect(rect)
             if self.selected_box == idx:
-                self.draw_handles(painter, canvas_rect, color)
+                self.draw_handles(painter, rect, color)
 
             if label_name:
-                painter.drawText(canvas_rect.topLeft() + QPoint(3, -3), label_name)
+                painter.drawText(rect.topLeft() + QPointF(3 / self.scale, -3 / self.scale), label_name)
 
         # drawing bbox(realtime)
         if self.current_rect: 
-            canvas_rect = self.map_to_canvas(self.current_rect.normalized())
+            rect = self.current_rect.normalized()
             if self.current_label is not None:
                 color = self.get_label_color(self.current_label)
             else:
                 color = Qt.red
-            pen = QPen(color, 1, Qt.SolidLine)
-            pen.setCosmetic(True)
+            pen = QPen(color, 1 / self.scale)
             painter.setPen(pen)
-            painter.drawRect(canvas_rect)
-            self.draw_handles(painter, canvas_rect, color)
+            painter.drawRect(rect)
+            self.draw_handles(painter, rect, color)
     
 
     def map_to_image(self, pos):
@@ -112,7 +117,7 @@ class ImageCanvas(QWidget):
         y = rect.y() * self.scale + self.offset.y()
         w = rect.width() * self.scale
         h = rect.height() * self.scale
-        return QRect(int(x), int(y), int(w), int(h))
+        return QRectF(int(x), int(y), int(w), int(h))
 
     # click vào bbox, click ra ngoài
     def mousePressEvent(self, event):
@@ -124,7 +129,6 @@ class ImageCanvas(QWidget):
         pos_img = self.map_to_image(pos_canvas)
 
         if event.button() == Qt.LeftButton:
-            self.resize_mode = None
             idx = self.find_box_at(pos_img)
 
             if idx != -1:
@@ -138,7 +142,11 @@ class ImageCanvas(QWidget):
                 return
             if idx == -1:
                 self.selected_box = None
+                self.panning = True
+                self.last_pan_pos = event.pos()
+                self.setCursor(Qt.ClosedHandCursor)
                 self.update()
+                return
 
             # vẽ box mới
             if self.drawing:
@@ -168,6 +176,13 @@ class ImageCanvas(QWidget):
             self.update()
             return
 
+        if self.panning:
+            delta = event.pos() - self.last_pan_pos
+            self.offset += delta
+            self.last_pan_pos = event.pos()
+            self.clamp_offset()
+            self.update()
+            return
         # draw box
         if self.dragging and self.selected_box is not None and self.selected_box < len(self.boxes):
             item = self.boxes[self.selected_box]
@@ -186,6 +201,14 @@ class ImageCanvas(QWidget):
     def mouseReleaseEvent(self, event):
         self.resize_mode = None
         self.dragging = False
+
+        if event.button() == Qt.MiddleButton:
+            self.panning = False
+            self.setCursor(Qt.ArrowCursor)
+
+        if self.panning:
+            self.panning = False
+            self.setCursor(Qt.ArrowCursor)
 
         if self.current_rect:
             rect = self.current_rect.normalized()
@@ -211,15 +234,8 @@ class ImageCanvas(QWidget):
         if not self.pixmap:
             return
         
-        img_w =self.pixmap.width()
-        img_h = self.pixmap.height()
-
-        canvas_w = self.width()
-        canvas_h = self.height()
-        self.scale = min(
-            canvas_w / img_w,
-            canvas_h / img_h
-        )
+        self.scale = self.fit_scale()
+        self.pan_offset = QPoint(0,0)
         self.update()
 
     def keyPressEvent(self, event):
@@ -304,21 +320,53 @@ class ImageCanvas(QWidget):
 
     # ctrl zoom in, zoom out
     def wheelEvent(self, event):
-        modifiers = event.modifiers()
-        if modifiers & Qt.ControlModifier:
+        if not self.pixmap:
+            return
+        if event.modifiers() & Qt.ControlModifier:
+            mouse_pos = event.pos()
+            old_pos = self.map_to_image(mouse_pos)
+            zoom_factor = 1.25
+            min_scale = self.fit_scale()
+            max_scale = min_scale * 20
+
             if event.angleDelta().y() > 0:
-                self.zoom_in()
+                new_scale = self.scale * zoom_factor
+                if new_scale > max_scale:
+                    new_scale = max_scale
             else:
-                self.zoom_out()
-        else: 
-            event.ignore()
+                new_scale = self.scale / zoom_factor
+                if new_scale < min_scale:
+                    new_scale = min_scale
+
+            if new_scale == self.scale:
+                return
+            self.scale = new_scale
+            new_pos = self.map_to_image(mouse_pos)
+            delta = new_pos - old_pos
+            self.offset += QPointF(
+                delta.x() * self.scale,
+                delta.y() * self.scale
+            )
+            self.clamp_offset()
+            self.update()
 
     def zoom_in(self):
         self.scale *= 1.1
         self.update()
 
     def zoom_out(self):
-        self.scale /= 1.1
+        if not self.pixmap:
+            return
+        min_scale = self.fit_scale()
+        new_scale = self.scale * 0.9
+        if new_scale < min_scale:
+            new_scale = min_scale
+        if new_scale == self.scale:
+            return
+        self.scale = new_scale
+        if self.scale == min_scale:
+            self.pan_offset = QPoint(0, 0)
+
         self.update()
 
     def set_label(self, label_id):
@@ -344,3 +392,32 @@ class ImageCanvas(QWidget):
         painter.drawLine(0, 8, 16, 8)
         painter.end()
         self.setCursor(QCursor(pixmap))
+    
+    # resize auto scale
+    def resizeEvent(self, event):
+        
+        if self.pixmap:
+            if self.scale <= self.fit_scale():
+                self.fit_to_window()
+        self.update()
+    
+    def fit_scale(self):
+        if not self.pixmap:
+            return 1.0
+        return min(
+            self.width() / self.pixmap.width(),
+            self.height() / self.pixmap.height()
+        )
+    
+    def clamp_offset(self):
+        if not self.pixmap:
+            return
+        scaled_w = self.pixmap.width() * self.scale
+        scaled_h = self.pixmap.height() * self.scale
+        min_x = self.width() - scaled_w
+        min_y = self.height() - scaled_h
+        max_x = 0
+        max_y = 0
+        self.offset.setX(max(min_x, min(self.offset.x(), max_x)))
+        self.offset.setY(max(min_y, min(self.offset.y(), max_y)))
+        
