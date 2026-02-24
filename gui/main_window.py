@@ -4,7 +4,7 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QLabel, QMainWindow, QMessageBox, 
     QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget,
-    QListWidgetItem, QShortcut
+    QListWidgetItem, QShortcut, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QRect
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence
@@ -83,6 +83,10 @@ class MainWindow(QMainWindow):
 
         # canvas
         self.canvas.setMinimumSize(800, 600)
+        self.canvas.setSizePolicy(
+            QSizePolicy.Expanding, 
+            QSizePolicy.Expanding
+        )
         self.canvas.box_created.connect(self.on_box_created)
         self.canvas.box_created.connect(self.on_boxes_changed)
         self.canvas.box_double_clicked.connect(self.on_edit_label)
@@ -143,12 +147,15 @@ class MainWindow(QMainWindow):
         right_panel = QVBoxLayout()
         right_panel.addLayout(label_layout)
         right_panel.addLayout(image_layout)
+        right_panel_widget = QWidget()
+        right_panel_widget.setLayout(right_panel)
+        right_panel_widget.setFixedWidth(220)
 
         # main layout 
         main_layout = QHBoxLayout()
         main_layout.addLayout(control_layout)
         main_layout.addWidget(self.canvas)
-        main_layout.addLayout(right_panel)
+        main_layout.addWidget(right_panel_widget)
 
         root_layout = QVBoxLayout()
         root_layout.addLayout(status_layout)
