@@ -131,6 +131,15 @@ class ImageCanvas(QWidget):
         if event.button() == Qt.LeftButton:
             idx = self.find_box_at(pos_img)
 
+            # vẽ box mới
+            if self.drawing:
+                self.selected_box = None
+                self.start_pos = pos_img
+                self.current_rect = QRect(pos_img, pos_img)
+                self.setCursor(Qt.CrossCursor)
+                self.update()
+                return
+
             if idx != -1:
                 self.selected_box = idx
                 self.dragging = True
@@ -140,19 +149,12 @@ class ImageCanvas(QWidget):
                 self.update()
                 print("Selected box:", idx)
                 return
-            if idx == -1:
-                self.selected_box = None
-                self.panning = True
-                self.last_pan_pos = event.pos()
-                self.setCursor(Qt.ClosedHandCursor)
-                self.update()
-                return
-
-            # vẽ box mới
-            if self.drawing:
-                self.start_pos = pos_img
-                self.current_rect = QRect(pos_img, pos_img)
-                self.update()
+            
+            self.selected_box = None
+            self.panning = True
+            self.last_pan_pos = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)
+            self.update()
     # bắt đầu vẽ
     def mouseMoveEvent(self, event):
         if not self.pixmap: 
@@ -262,7 +264,10 @@ class ImageCanvas(QWidget):
             else:
                 self.setCursor(Qt.CrossCursor)
             print("Label Mode")
-            return    
+            return  
+        if event.key() == Qt.Key_Escape:
+            self.drawing = False
+            self.setCursor(Qt.ArrowCursor)
         
         if event.key() == Qt.Key_Delete:
             if self.selected_box is not None:
@@ -277,7 +282,7 @@ class ImageCanvas(QWidget):
 
     # vẽ 4 điểm góc
     def draw_handles(self, painter, rect, color):
-        size = 4
+        size = 2
         half = size // 2
         points = [
             rect.topLeft(),
@@ -298,7 +303,7 @@ class ImageCanvas(QWidget):
 
     # handle thay doi 4 diem goc phong to, thu nho
     def detect_handle(self, pos_canvas, rect_canvas): 
-        size = 8
+        size = 4
         handles = {
             "tl": QRect(rect_canvas.topLeft() - QPoint(size//2, size//2), QSize(size, size)),
             "tr": QRect(rect_canvas.topRight() - QPoint(size//2, size//2), QSize(size, size)),
