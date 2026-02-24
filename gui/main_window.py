@@ -19,6 +19,8 @@ from dialog.select_label_dialog import SelectLabelDialog
 from logic.auto_label_logic import AutoLabelLogic
 from dialog.new_label_dialog import NewLabelDialog
 from gui.logger import setup_logger
+from logic.auto_label_worker import AutoLabelWorker
+from dialog.loading_dialog import LoadingDialog
 log = setup_logger()
 
 class MainWindow(QMainWindow):
@@ -662,13 +664,43 @@ class MainWindow(QMainWindow):
         )
         if not ok:
             return
-        total = self.logic.run(
-            image_dir=image_dir,
-            model_path=model_path,
-            label_dir=label_dir
+        # total = self.logic.run(
+        #     image_dir=image_dir,
+        #     model_path=model_path,
+        #     label_dir=label_dir
+        # )
+        # QMessageBox.information(
+        #     self,
+        #     "Done",
+        #     f"✅ Auto label hoàn tất\n{total} ảnh"
+        # )
+
+        #show loading
+        self.loading = LoadingDialog(self)
+        self.loading.show()
+        #start worker
+        self.worker = AutoLabelWorker(
+            self.logic,
+            image_dir, 
+            model_path,
+            label_dir
         )
+        self.worker.finished_signal.connect(self.on_auto_label_done)
+        self.worker.error_signal.connect(self.on_auto_label_error)
+        self.worker.start()
+
+    def on_auto_label_done(self, total):
+        self.loading.close()
         QMessageBox.information(
             self,
             "Done",
             f"✅ Auto label hoàn tất\n{total} ảnh"
+        )
+
+    def on_auto_label_error(self, error):
+        self.loading.close()
+        QMessageBox.critical(
+            self,
+            "Error",
+            error
         )
