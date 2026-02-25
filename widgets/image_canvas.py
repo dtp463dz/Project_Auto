@@ -125,7 +125,7 @@ class ImageCanvas(QWidget):
 
             # vẽ box mới
             if self.drawing:
-                self.selected_box = None
+                self.save_state()
                 self.start_pos = pos_img
                 self.current_rect = QRectF(pos_img, pos_img)
                 self.update()
@@ -138,6 +138,7 @@ class ImageCanvas(QWidget):
                 
                 if handle:
                     # resize mode
+                    self.save_state()
                     self.selected_box = idx
                     self.resize_mode = handle
                     cursor_map = {
@@ -147,15 +148,14 @@ class ImageCanvas(QWidget):
                         "bl": Qt.SizeBDiagCursor,
                     }
                     self.setCursor(cursor_map.get(handle,Qt.ArrowCursor))
-                    self.update()
                     return
             idx = self.find_box_at(pos_img)
             if idx != -1:
+                self.save_state()
                 self.selected_box = idx
                 self.dragging = True
                 self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
                 self.update_cursor(pos_canvas)
-                self.update()
                 return
             
             self.selected_box = None
@@ -251,7 +251,6 @@ class ImageCanvas(QWidget):
             self.panning = False
             self.setCursor(Qt.ArrowCursor)
         if was_dragging or was_resizing:
-            self.save_state()
             self.boxes_changed.emit()
 
         if self.current_rect:

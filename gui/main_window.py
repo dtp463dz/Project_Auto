@@ -454,7 +454,7 @@ class MainWindow(QMainWindow):
     def on_boxes_changed(self):
         self.dirty = True
         self.setWindowTitle("*" + self.windowTitle().lstrip("*"))
-        print("DIRTY = True")
+       
     
     def check_unsaved(self):
         if not self.dirty:
