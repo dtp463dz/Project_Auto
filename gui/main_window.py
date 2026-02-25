@@ -193,6 +193,9 @@ class MainWindow(QMainWindow):
         undo.triggered.connect(self.edit_lib.undo)
         redo.triggered.connect(self.edit_lib.redo)
 
+        self.actionUndo.triggered.connect(self.canvas.undo)
+        self.actionRedo.triggered.connect(self.canvas.redo)
+
         edit_menu.addAction(undo)
         edit_menu.addAction(redo)
 

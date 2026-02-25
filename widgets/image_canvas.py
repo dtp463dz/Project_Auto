@@ -15,6 +15,8 @@ class ImageCanvas(QWidget):
         self.pixmap = None
         self.scale = 1.0
         self.boxes = []
+        self.undo_stack = []
+        self.redo_stack = []
         self.drawing = False
         self.current_label = None
         self.current_rect = None
@@ -36,6 +38,8 @@ class ImageCanvas(QWidget):
         self.scale = self.fit_scale()
         self.center_image()
         self.boxes.clear()
+        self.undo_stack.clear()
+        self.redo_stack.clear()
         self.current_rect = None
         self.start_pos = None
         self.update()
@@ -247,9 +251,11 @@ class ImageCanvas(QWidget):
             self.panning = False
             self.setCursor(Qt.ArrowCursor)
         if was_dragging or was_resizing:
+            self.save_state()
             self.boxes_changed.emit()
 
         if self.current_rect:
+            self.save_state()
             rect = self.current_rect.normalized()
             self.box_created.emit(rect)
 
@@ -279,6 +285,11 @@ class ImageCanvas(QWidget):
 
     def keyPressEvent(self, event):
         if event.modifiers() & Qt.ControlModifier:
+            if event.key() == Qt.Key_Z:
+                self.undo()
+            elif event.key() == Qt.Key_Y:
+                self.redo()
+
             if event.key() == Qt.Key_0:
                 self.fit_to_window()
                 event.accept()
@@ -532,3 +543,31 @@ class ImageCanvas(QWidget):
             (canvas_w - scaled_w) / 2,
             (canvas_h - scaled_h) / 2
         )
+
+    def clone_boxes(self):
+        return[
+            {
+                "rect": QRectF(box["rect"]),
+                "label": box["label"]
+            }
+            for box in self.boxes
+        ]
+    def save_state(self):
+        self.undo_stack.append(self.clone_boxes())
+        if len(self.undo_stack) > 100:
+            self.undo_stack.pop(0)
+        self.redo_stack.clear()
+    def undo(self):
+        if not self.undo_stack:
+            return
+        self.redo_stack.append(self.clone_boxes())
+        self.boxes = self.undo_stack.pop()
+        self.update()
+        self.boxes_changed.emit()
+    def redo(self):
+        if not self.redo_stack:
+            return
+        self.undo_stack.append(self.clone_boxes())
+        self.boxes = self.redo_stack.pop()
+        self.update()
+        self.boxes_changed.emit()
