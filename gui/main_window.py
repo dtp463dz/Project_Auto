@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget,
     QListWidgetItem, QShortcut, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QRect
+from PyQt5.QtCore import Qt, QRect, QRectF
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence
 
 from libs.file_lib import FileLib
@@ -415,7 +415,7 @@ class MainWindow(QMainWindow):
         self.label_list.blockSignals(False)
         
 
-    def on_box_created(self, rect):
+    def on_box_created(self, rect:QRectF):
         dialog = SelectLabelDialog(self.labels)
         if not dialog.exec_():
             return

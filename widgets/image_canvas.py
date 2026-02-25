@@ -6,7 +6,7 @@ from gui.logger import setup_logger
 log = setup_logger()
 
 class ImageCanvas(QWidget):
-    box_created = pyqtSignal(QRect)
+    box_created = pyqtSignal(QRectF)
     box_double_clicked = pyqtSignal(int)
     boxes_changed = pyqtSignal()
 
