@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
         )
         self.canvas.box_created.connect(self.on_box_created)
         self.canvas.box_created.connect(self.on_boxes_changed)
+        self.canvas.boxes_changed.connect(self.on_boxes_changed)
         self.canvas.box_double_clicked.connect(self.on_edit_label)
 
         # control buttons 

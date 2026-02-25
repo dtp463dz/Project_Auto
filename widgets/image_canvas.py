@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QColor, QCursor
-from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize, QPointF, QRectF
+from PyQt5.QtCore import Qt, QRect, QPoint, pyqtSignal, QSize, QPointF, QRectF, QSizeF
 import colorsys
 from gui.logger import setup_logger
 log = setup_logger()
@@ -8,6 +8,7 @@ log = setup_logger()
 class ImageCanvas(QWidget):
     box_created = pyqtSignal(QRect)
     box_double_clicked = pyqtSignal(int)
+    boxes_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -94,9 +95,9 @@ class ImageCanvas(QWidget):
         y = (pos.y() - self.offset.y()) / self.scale
         return QPoint(int(x), int(y))
     
-    def map_to_canvas(self, rect):
-        x = rect.x() * self.scale + self.offset.x()
-        y = rect.y() * self.scale + self.offset.y()
+    def map_to_canvas(self, rect: QRectF):
+        x = rect.left() * self.scale + self.offset.x()
+        y = rect.top() * self.scale + self.offset.y()
         w = rect.width() * self.scale
         h = rect.height() * self.scale
         return QRectF(int(x), int(y), int(w), int(h))
@@ -111,7 +112,6 @@ class ImageCanvas(QWidget):
         pos_img = self.map_to_image(pos_canvas)
 
         if event.button() == Qt.LeftButton:
-            idx = self.find_box_at(pos_img)
 
             # vẽ box mới
             if self.drawing:
@@ -121,21 +121,38 @@ class ImageCanvas(QWidget):
                 self.setCursor(Qt.CrossCursor)
                 self.update()
                 return
-
+            idx = self.find_box_at(pos_img)
             if idx != -1:
+                rect_img = self.boxes[idx]["rect"]
+                rect_canvas = self.map_to_canvas(rect_img)
+                handle = self.detect_handle(pos_canvas, rect_canvas)
                 self.selected_box = idx
-                self.dragging = True
-                self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
-                self.current_label = self.boxes[idx]["label"]
-                self.set_label_cursor(self.current_label)
-                self.update()
-                print("Selected box:", idx)
-                return
+                if handle:
+                    # resize mode
+                    self.resize_mode = handle
+                    cursor_map = {
+                        "tl": Qt.SizeFDiagCursor,
+                        "br": Qt.SizeFDiagCursor,
+                        "tr": Qt.SizeBDiagCursor,
+                        "bl": Qt.SizeBDiagCursor,
+                    }
+                    self.setCursor(cursor_map.get(handle,Qt.ArrowCursor))
+                    self.update()
+                    return
+                else:
+                    # drag mode
+                    self.dragging = True
+                    self.drag_offset = pos_img - rect_img.topLeft()
+                    self.current_label = self.boxes[idx]["label"]
+                    self.set_label_cursor(self.current_label)
+                    self.update()
+                    return
             
             self.selected_box = None
-            self.panning = True
-            self.last_pan_pos = event.pos()
-            self.setCursor(Qt.ClosedHandCursor)
+            if event.modifiers() & Qt.ControlModifier:
+                self.panning = True
+                self.last_pan_pos = event.pos()
+                self.setCursor(Qt.ClosedHandCursor)
             self.update()
     # bắt đầu vẽ
     def mouseMoveEvent(self, event):
@@ -147,42 +164,70 @@ class ImageCanvas(QWidget):
         if self.resize_mode and self.selected_box is not None:
             item = self.boxes[self.selected_box]
             r = item["rect"]
+            left =  r.left()
+            right = r.right()
+            top = r.top()
+            bottom = r.bottom()
             if self.resize_mode == "tl":
-                r.setTopLeft(pos_img)
+                left = pos_img.x()
+                top = pos_img.y()
             elif self.resize_mode == "tr":
-                r.setTopRight(pos_img)
+                right = pos_img.x()
+                top = pos_img.y()
             elif self.resize_mode == "bl":
-                r.setBottomLeft(pos_img)
+                left = pos_img.x()
+                bottom = pos_img.y()
             elif self.resize_mode == "br":
-                r.setBottomRight(pos_img)
+                right = pos_img.x()
+                bottom = pos_img.y()
 
-            item["rect"] = r.normalized()
+            item["rect"] = QRectF(QPointF(left, top), QPointF(right, bottom)).normalized()
             self.update()
             return
 
-        if self.panning:
+        if self.panning and (event.buttons() & Qt.LeftButton):
             delta = event.pos() - self.last_pan_pos
             self.offset += delta
             self.last_pan_pos = event.pos()
             self.clamp_offset()
             self.update()
             return
-        # draw box
+        # draw existing box
         if self.dragging and self.selected_box is not None and self.selected_box < len(self.boxes):
             item = self.boxes[self.selected_box]
             r = item["rect"]
             new_top_left = pos_img - self.drag_offset
-            item["rect"] = QRect(new_top_left, r.size())
+            item["rect"] = QRectF(
+                new_top_left,
+                QSizeF(r.width(), r.height())
+            )
             self.update()
             return
 
         # draw new bbox realtime
-        if self.start_pos:
-            self.current_rect = QRect(self.start_pos, pos_img)
+        if self.start_pos is not None:
+            self.current_rect = QRectF(self.start_pos, pos_img).normalized()
             self.update()
+            return
+        
+        #detect handle hover -> update cursor
+        if self.selected_box is not None:
+            rect_img = self.boxes[self.selected_box]['rect']
+            rect_canvas = self.map_to_canvas(rect_img)
+            handle = self.detect_handle(event.pos(), rect_canvas)
+            if handle:
+                if handle in ("tl", "br"):
+                    self.setCursor(Qt.SizeFDiagCursor)
+                elif handle in ("tr", "bl"):
+                    self.setCursor(Qt.SizeBDiagCursor)
+                return
+        self.setCursor(Qt.ArrowCursor)
 
     # event ket thuc 
     def mouseReleaseEvent(self, event):
+        was_dragging = self.dragging
+        was_resizing = self.resize_mode is not None
+
         self.resize_mode = None
         self.dragging = False
 
@@ -193,6 +238,8 @@ class ImageCanvas(QWidget):
         if self.panning:
             self.panning = False
             self.setCursor(Qt.ArrowCursor)
+        if was_dragging or was_resizing:
+            self.boxes_changed.emit()
 
         if self.current_rect:
             rect = self.current_rect.normalized()
@@ -255,6 +302,7 @@ class ImageCanvas(QWidget):
             if self.selected_box is not None:
                 if 0 <= self.selected_box < len(self.boxes):
                     del self.boxes[self.selected_box]
+                    self.boxes_changed.emit()
                 self.selected_box = None
                 self.unsetCursor()
                 self.update()
@@ -264,44 +312,65 @@ class ImageCanvas(QWidget):
 
     # vẽ 4 điểm góc
     def draw_handles(self, painter, rect, color):
-        size = 2
-        half = size // 2
+        size = max(6, int(8 / self.scale))
+        half = size / 2
+        painter.setBrush(color)
+        painter.setPen(Qt.NoPen)
         points = [
             rect.topLeft(),
             rect.topRight(),
             rect.bottomLeft(),
             rect.bottomRight()
         ]
-
-        painter.setBrush(color)
-        painter.setPen(QPen(color, 1))
         for p in points:
-            painter.drawRect(
+            handle_rect = QRectF(
                 p.x() - half,
                 p.y() - half,
                 size,
                 size
             )
+            painter.drawRect(handle_rect)
 
     # handle thay doi 4 diem goc phong to, thu nho
-    def detect_handle(self, pos_canvas, rect_canvas): 
-        size = 4
+    def detect_handle(self, pos_canvas: QPointF, rect_canvas: QRectF): 
+        size = max(6, int(8 / self.scale))
         handles = {
-            "tl": QRect(rect_canvas.topLeft() - QPoint(size//2, size//2), QSize(size, size)),
-            "tr": QRect(rect_canvas.topRight() - QPoint(size//2, size//2), QSize(size, size)),
-            "bl": QRect(rect_canvas.bottomLeft() - QPoint(size//2, size//2), QSize(size, size)),
-            "br": QRect(rect_canvas.bottomRight() - QPoint(size//2, size//2), QSize(size, size)),
+            "tl": QRectF(
+                rect_canvas.left() - size / 2,
+                rect_canvas.top() - size / 2,
+                size,
+                size
+            ),
+            "tr": QRectF(
+                rect_canvas.right() - size / 2,
+                rect_canvas.top() - size / 2,
+                size,
+                size
+            ),
+            "bl": QRectF(
+                rect_canvas.left() - size / 2,
+                rect_canvas.bottom() - size / 2,
+                size,
+                size
+            ),
+            "br": QRectF(
+                rect_canvas.right() - size / 2,
+                rect_canvas.bottom() - size / 2,
+                size,
+                size
+            ),
         }
 
-        for k, r in handles.items():
-            if r.contains(pos_canvas):
-                return k
+        for name, rect in handles.items():
+            if rect.contains(pos_canvas):
+                return name
         return None
 
     # detect click bbox
     def find_box_at(self, pos_img):
         for item in range(len(self.boxes) -1, -1, -1):
-            if self.boxes[item]["rect"].contains(pos_img):
+            rect = self.boxes[item]["rect"]
+            if rect.contains(pos_img):
                 return item
         return -1
 
@@ -379,7 +448,15 @@ class ImageCanvas(QWidget):
         painter.drawLine(0, 8, 16, 8)
         painter.end()
         self.setCursor(QCursor(pixmap))
-    
+
+    # update cursor handle resize
+    def update_cursor_for_hanle(self, handle):
+        if handle in ("tl", "br"):
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif handle in ("tr", "bl"):
+            self.setCursor(Qt.SizeBDiagCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
     # resize auto scale
     def resizeEvent(self, event):
         
@@ -419,5 +496,3 @@ class ImageCanvas(QWidget):
             (canvas_w - scaled_w) / 2,
             (canvas_h - scaled_h) / 2
         )
-        
-        
