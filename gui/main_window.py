@@ -223,17 +223,29 @@ class MainWindow(QMainWindow):
 
     def select_ok_folder(self): 
         folder = QFileDialog.getExistingDirectory(self, "Select OK Folder")
+        if not folder:
+            return
+        if not self.check_unsaved():
+            return
         if folder:
             self.load_ok_folder(folder)
             log.info(f"Select OK images folder: {folder}")
             log.info(f"Total images loaded: {len(self.current_images)}")
+            self.dirty = False
+            self.update_window_title()
 
     def select_ng_folder(self): 
         folder = QFileDialog.getExistingDirectory(self, "Select NG Folder")
+        if not folder:
+            return
+        if not self.check_unsaved():
+            return
         if folder:
             self.load_ng_folder(folder)
             log.info(f"Select NG images folder: {folder}")
             log.info(f"Total images loaded: {len(self.current_images)}")
+            self.dirty = False
+            self.update_window_title()
 
     def select_labels_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Labels Folder")
