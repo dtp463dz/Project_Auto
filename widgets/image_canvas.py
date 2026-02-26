@@ -9,6 +9,7 @@ class ImageCanvas(QWidget):
     box_created = pyqtSignal(QRectF)
     box_double_clicked = pyqtSignal(int)
     boxes_changed = pyqtSignal()
+    box_selected = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -153,6 +154,7 @@ class ImageCanvas(QWidget):
             if idx != -1:
                 self.save_state()
                 self.selected_box = idx
+                self.box_selected.emit(idx)
                 self.dragging = True
                 self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
                 self.update_cursor(pos_canvas)

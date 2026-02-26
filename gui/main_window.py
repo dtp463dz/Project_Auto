@@ -90,6 +90,7 @@ class MainWindow(QMainWindow):
         self.canvas.box_created.connect(self.on_box_created)
         self.canvas.box_created.connect(self.on_boxes_changed)
         self.canvas.boxes_changed.connect(self.on_boxes_changed)
+        self.canvas.box_selected.connect(self.on_canvas_box_selected)
         self.canvas.box_double_clicked.connect(self.on_edit_label)
 
         # control buttons 
@@ -454,6 +455,13 @@ class MainWindow(QMainWindow):
     def on_boxes_changed(self):
         self.dirty = True
         self.setWindowTitle("*" + self.windowTitle().lstrip("*"))
+
+    def on_canvas_box_selected(self, idx):
+        if idx < 0 or idx >= self.label_list.count():
+            return
+        self.label_list.blockSignals(True)
+        self.label_list.setCurrentRow(idx)
+        self.label_list.blockSignals(False)
        
     
     def check_unsaved(self):
@@ -675,16 +683,6 @@ class MainWindow(QMainWindow):
         )
         if not ok:
             return
-        # total = self.logic.run(
-        #     image_dir=image_dir,
-        #     model_path=model_path,
-        #     label_dir=label_dir
-        # )
-        # QMessageBox.information(
-        #     self,
-        #     "Done",
-        #     f"✅ Auto label hoàn tất\n{total} ảnh"
-        # )
 
         #show loading
         self.loading = LoadingDialog(self)
