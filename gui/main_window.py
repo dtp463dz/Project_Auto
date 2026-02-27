@@ -104,7 +104,9 @@ class MainWindow(QMainWindow):
         self.btn_zoom_in = QPushButton("Zoom In")
         self.btn_zoom_out = QPushButton("Zoom Out")
         self.btn_auto = QPushButton("⚙ Auto Labels")
-        self.btn_save = QPushButton("💾 Save")
+        self.btn_save = QPushButton("💾 Save") 
+        self.btn_delete_all = QPushButton("❌ Delete") 
+
 
         self.btn_ok.clicked.connect(self.select_ok_folder)
         self.btn_ng.clicked.connect(self.select_ng_folder)
@@ -115,6 +117,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_in.clicked.connect(self.canvas.zoom_in)
         self.btn_zoom_out.clicked.connect(self.canvas.zoom_out)
         self.btn_save.clicked.connect(self.save_label)
+        self.btn_delete_all.clicked.connect(self.delete_curent_image_label)
 
         # control layout
         control_layout = QVBoxLayout()
@@ -128,6 +131,7 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.btn_zoom_in)
         control_layout.addWidget(self.btn_zoom_out)
         control_layout.addWidget(self.btn_save)
+        control_layout.addWidget(self.btn_delete_all)
         control_layout.addStretch()
 
         # label list 
@@ -534,6 +538,68 @@ class MainWindow(QMainWindow):
         log.info(f"Save label file: {label_path}")
         log.info(f"Total boxes saved: {len(self.canvas.boxes)}")
 
+    def delete_curent_image_label(self):
+        if not self.current_images:
+            return
+        image_path = self.current_images[self.current_index]
+        reply = QMessageBox.question(
+            self,
+            "Delete Image",
+            f"Delete this image and its label?\n\n{image_path}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+        
+        try:
+            # delete image file
+            if os.path.exists(image_path):
+                os.remove(image_path)
+            # delete label file
+            if hasattr(self, "labels_dir") and self.labels_dir:
+                name = os.path.splitext(os.path.basename(image_path))[0]
+                label_path = os.path.join(self.labels_dir, name + ".txt")
+                if os.path.exists(label_path):
+                    os.remove(label_path)
+                    log.info(f"Deleted label: {label_path}")
+                else:
+                    log.warning(f"Label not found: {label_path}")
+            del self.current_images[self.current_index]
+            # case: no images left
+            if not self.current_images:
+                self.canvas.pixmap = None
+                self.canvas.boxes.clear()
+                self.canvas.update()
+                self.image_list.clear()
+                self.current_index = -1
+                self.dirty = False
+                self.update_window_title()
+                self.image_info.setText("No image")
+                return
+            if self.current_index >= len(self.current_images):
+                self.current_index = len(self.current_images) - 1
+            # refresh UI list
+            self.image_list.blockSignals(True)
+            self.image_list.clear()
+            for img in self.current_images:
+                self.image_list.addItem(os.path.basename(img))
+            self.image_list.setCurrentRow(self.current_index)
+            self.image_list.blockSignals(False)
+            #load next image
+            self.update_image()
+            #reset dirty
+            self.dirty = False
+            self.update_window_title()
+            log.info(f"Deleted image: {image_path}")
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to delete image: \n{str(e)}"
+            )
+
+        return
         
     def save_classes_file(self):
         if not self.labels_dir:
