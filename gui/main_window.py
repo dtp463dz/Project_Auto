@@ -92,6 +92,8 @@ class MainWindow(QMainWindow):
         self.canvas.boxes_changed.connect(self.on_boxes_changed)
         self.canvas.box_selected.connect(self.on_canvas_box_selected)
         self.canvas.box_double_clicked.connect(self.on_edit_label)
+        self.canvas.key_next_pressed.connect(self.next_image)
+        self.canvas.key_prev_pressed.connect(self.prev_image)
 
         # control buttons 
         self.btn_ok = QPushButton("📂 OK Folder")

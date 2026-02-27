@@ -10,6 +10,8 @@ class ImageCanvas(QWidget):
     box_double_clicked = pyqtSignal(int)
     boxes_changed = pyqtSignal()
     box_selected = pyqtSignal(int)
+    key_next_pressed = pyqtSignal()
+    key_prev_pressed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -154,7 +156,6 @@ class ImageCanvas(QWidget):
             if idx != -1:
                 self.save_state()
                 self.selected_box = idx
-                self.box_selected.emit(idx)
                 self.dragging = True
                 self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
                 self.update_cursor(pos_canvas)
@@ -328,6 +329,11 @@ class ImageCanvas(QWidget):
                 self.update()
                 log.info(f"Delete bbox index={self.selected_box}")
                 return
+        
+        if event.key() == Qt.Key_D:
+            self.key_next_pressed.emit()
+        elif event.key() == Qt.Key_A:
+            self.key_prev_pressed.emit()
         super().keyPressEvent(event)
 
     # vẽ 4 điểm góc
