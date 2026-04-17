@@ -16,7 +16,7 @@ class AutoLabelLogic:
                 raise ValueError("Model path is not set.")
             self.model = YOLO(model_path)
 
-    def run(self, image_dir, model_path, label_dir, conf = 0.7):
+    def run(self, image_dir, model_path, label_dir, conf = 0.4):
 
         if not os.path.exists(label_dir):
             os.makedirs(label_dir)
