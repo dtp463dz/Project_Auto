@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QListWidgetItem, QShortcut, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QRect, QRectF
-from PyQt5.QtGui import QPixmap, QImage, QKeySequence
+from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QColor
 
 from libs.file_lib import FileLib
 from libs.edit_lib import EditLib
@@ -259,6 +259,7 @@ class MainWindow(QMainWindow):
             return
         self.labels_dir = folder
         self.load_classes_file()
+        self.refresh_image_list()
         self.statusBar().showMessage(f"Labels folder: {folder}")
         log.info(f"Select labels folder: {self.labels_dir}")
 
@@ -268,10 +269,8 @@ class MainWindow(QMainWindow):
             return
         
         self.current_images = images
-        self.image_list.clear()
-        for img in images:
-            self.image_list.addItem(os.path.basename(img))
         self.current_index = 0
+        self.refresh_image_list()
         self.current_mode = "OK"
         self.model_label.setText("MODE: OK")
         self.model_label.setStyleSheet("""
@@ -292,6 +291,7 @@ class MainWindow(QMainWindow):
         
         self.current_images = images
         self.current_index = 0
+        self.refresh_image_list()
         self.current_mode = "NG"
         self.model_label.setText("MODE: NG")
         self.model_label.setStyleSheet("""
@@ -318,6 +318,30 @@ class MainWindow(QMainWindow):
         self.image_list.setCurrentRow(self.current_index)
         self.image_list.blockSignals(False)
         log.info(f"Load image: {image_path}")
+
+    def has_label(self, image_path):
+        if not self.labels_dir:
+            return False
+        name = os.path.splitext(os.path.basename(image_path))[0]
+        label_path = os.path.join(self.labels_dir, name + ".txt")
+        return os.path.exists(label_path) and os.path.getsize(label_path) > 0
+
+    def refresh_image_list(self):
+        self.image_list.blockSignals(True)
+        self.image_list.clear()
+        for img in self.current_images:
+            name = os.path.basename(img)
+            item = QListWidgetItem(name)
+            if self.has_label(img):
+                item.setText(f"✅ {name}")
+                item.setForeground(QColor("#2E7D32"))   # xanh: đã gắn nhãn
+            else:
+                item.setText(f"⬜ {name}")
+                item.setForeground(QColor("#9E9E9E"))   # xám: chưa gắn nhãn
+            self.image_list.addItem(item)
+        if 0 <= self.current_index < len(self.current_images):
+            self.image_list.setCurrentRow(self.current_index)
+        self.image_list.blockSignals(False)
 
     def update_window_title(self):
         if not self.current_images:
@@ -397,7 +421,6 @@ class MainWindow(QMainWindow):
         self.canvas.current_label = label_id
         self.canvas.set_label_cursor(label_id)
         self.canvas.update()
-        print("Selected from list: ", bbox_index)
 
     def on_image_selected(self, item):
         if not self.check_unsaved():
@@ -535,6 +558,7 @@ class MainWindow(QMainWindow):
         self.save_classes_file()
         self.dirty = False
         self.update_window_title()
+        self.refresh_image_list()
         log.info(f"Save label file: {label_path}")
         log.info(f"Total boxes saved: {len(self.canvas.boxes)}")
 
@@ -580,12 +604,7 @@ class MainWindow(QMainWindow):
             if self.current_index >= len(self.current_images):
                 self.current_index = len(self.current_images) - 1
             # refresh UI list
-            self.image_list.blockSignals(True)
-            self.image_list.clear()
-            for img in self.current_images:
-                self.image_list.addItem(os.path.basename(img))
-            self.image_list.setCurrentRow(self.current_index)
-            self.image_list.blockSignals(False)
+            self.refresh_image_list()
             #load next image
             self.update_image()
             #reset dirty
