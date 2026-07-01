@@ -6,21 +6,22 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget,
     QListWidgetItem, QShortcut, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QRect, QRectF
+from PyQt5.QtCore import Qt, QRect, QRectF, QSettings
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QColor
 
 from libs.file_lib import FileLib
 from libs.edit_lib import EditLib
-from widgets.image_canvas import ImageCanvas
 from libs.view_lib import ViewLib
 from libs.help_lib import HelpLib
+from widgets.image_canvas import ImageCanvas
 from dialog.dialog_lib import DialogLib
 from dialog.select_label_dialog import SelectLabelDialog
-from logic.auto_label_logic import AutoLabelLogic
 from dialog.new_label_dialog import NewLabelDialog
-from gui.logger import setup_logger
-from logic.auto_label_worker import AutoLabelWorker
 from dialog.loading_dialog import LoadingDialog
+from logic.auto_label_worker import AutoLabelWorker
+from logic.auto_label_logic import AutoLabelLogic
+from gui.logger import setup_logger
+from gui.theme import get_theme_qss
 log = setup_logger()
 
 class MainWindow(QMainWindow):
@@ -44,6 +45,10 @@ class MainWindow(QMainWindow):
         self.labels_dir = None
         self.dirty = False
         self.hidden_labels = set()
+
+        self.settings = QSettings("TPLabel", "TPLabelApp")
+        self.current_theme = self.settings.value("theme", "light")
+
         QShortcut(QKeySequence("Ctrl+S"), self, self.save_label)
 
         # self.init_menu()
@@ -51,36 +56,23 @@ class MainWindow(QMainWindow):
 
     # UI
     def init_ui(self):
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #F7F9FC;
-                font-family: Segoe UI;
-                font-size: 13px;
-            }
-
-            QPushButton {
-                background-color: #4A90E2;
-                color: white;
-                border-radius: 6px;
-                padding: 6px 14px;
-            }
-                           
-            QPushButton:hover {
-                background-color: #6AAEFF;
-            }
-
-            QPushButton:pressed {
-                background-color: #357ABD;
-            }
-           
-            """)
+        self.apply_theme(self.current_theme)
         central_widget = QWidget(self)
         # status bar
         self.create_status_bar()
+        # Theme toggle
+        self.btn_theme_toggle = QPushButton()
+        self.btn_theme_toggle.setFixedWidth(110)
+        self.btn_theme_toggle.setToolTip("Chuyển đổi giao diện Sáng/Tối")
+        self.btn_theme_toggle.clicked.connect(self.toggle_theme)
+        self._update_theme_button_text()
+
         status_layout = QHBoxLayout()
         status_layout.addWidget(self.model_label)
         status_layout.addStretch()
         status_layout.addWidget(self.image_info)
+        status_layout.addSpacing(12)
+        status_layout.addWidget(self.btn_theme_toggle)
 
         # canvas
         self.canvas.setMinimumSize(800, 600)
@@ -176,6 +168,7 @@ class MainWindow(QMainWindow):
         right_panel.addLayout(box_layout)
         right_panel.addLayout(image_layout)
         right_panel_widget = QWidget()
+        right_panel_widget.setObjectName("rightPanel")
         right_panel_widget.setLayout(right_panel)
         right_panel_widget.setFixedWidth(220)
 
@@ -457,6 +450,22 @@ class MainWindow(QMainWindow):
                 self.update_image()
                 self.load_label_file(path)
                 break
+    
+    # set THEME
+    def apply_theme(self, theme_name):
+        self.current_theme = theme_name
+        self.setStyleSheet(get_theme_qss(theme_name))
+        self.settings.setValue("theme", theme_name)
+        if hasattr(self, "btn_theme_toggle"):
+            self._update_theme_button_text()
+    def toggle_theme(self):
+        new_theme = "dark" if self.current_theme == "light" else "light"
+        self.apply_theme(new_theme)
+    def _update_theme_button_text(self):
+        if self.current_theme == "dark":
+            self.btn_theme_toggle.setText("☀️ Light Mode")
+        else:
+            self.btn_theme_toggle.setText("🌙 Dark Mode")
 
     def refresh_label_list(self):
         self.label_list.blockSignals(True)
