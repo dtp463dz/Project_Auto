@@ -34,6 +34,7 @@ class ImageCanvas(QWidget):
         self.panning = False
         self.last_pan_pos = None
         self.hidden_labels = set()
+        self.real_change = False
 
     def load_image(self, path):
         self.pixmap = QPixmap(path)
@@ -168,10 +169,10 @@ class ImageCanvas(QWidget):
                 handle = self.detect_handle(pos_canvas, rect_canvas)
                 
                 if handle:
-                    # resize mode
-                    self.save_state()
                     self.selected_box = idx
                     self.resize_mode = handle
+                    self.real_change = False
+                    self.box_selected.emit(idx)
                     cursor_map = {
                         "tl": Qt.SizeFDiagCursor,
                         "br": Qt.SizeFDiagCursor,
@@ -179,14 +180,17 @@ class ImageCanvas(QWidget):
                         "bl": Qt.SizeBDiagCursor,
                     }
                     self.setCursor(cursor_map.get(handle,Qt.ArrowCursor))
+                    self.update()
                     return
             idx = self.find_box_at(pos_img)
             if idx != -1:
-                self.save_state()
                 self.selected_box = idx
                 self.dragging = True
+                self.real_change = False
                 self.drag_offset = pos_img - self.boxes[idx]["rect"].topLeft()
+                self.box_selected.emit(idx)
                 self.update_cursor(pos_canvas)
+                self.update()
                 return
             
             self.selected_box = None
@@ -201,6 +205,9 @@ class ImageCanvas(QWidget):
         pos_img = self.map_to_image(event.pos())
         # resize bbox
         if self.resize_mode and self.selected_box is not None:
+            if not self.real_change:
+                self.save_state()
+                self.real_change = True
             item = self.boxes[self.selected_box]
             r = item["rect"]
             left =  r.left()
@@ -233,6 +240,9 @@ class ImageCanvas(QWidget):
             return
         # draw existing box
         if self.dragging and self.selected_box is not None and self.selected_box < len(self.boxes):
+            if not self.real_change:
+                self.save_state()
+                self.real_change = True
             item = self.boxes[self.selected_box]
             r = item["rect"]
             new_top_left = pos_img - self.drag_offset
@@ -281,8 +291,10 @@ class ImageCanvas(QWidget):
         if self.panning:
             self.panning = False
             self.setCursor(Qt.ArrowCursor)
-        if was_dragging or was_resizing:
+
+        if (was_dragging or was_resizing) and self.real_change:
             self.boxes_changed.emit()
+        self.real_change = False
 
         if self.current_rect:
             self.save_state()
@@ -446,7 +458,6 @@ class ImageCanvas(QWidget):
 
             if event.angleDelta().y() > 0:
                 self.scale *= zoom_factor
-                
             else:
                 new_scale = self.scale / zoom_factor
                 if new_scale <= min_scale:
@@ -482,7 +493,6 @@ class ImageCanvas(QWidget):
         self.scale = new_scale
         if self.scale == min_scale:
             self.pan_offset = QPoint(0, 0)
-
         self.update()
 
     def set_label(self, label_id):

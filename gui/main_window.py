@@ -108,7 +108,6 @@ class MainWindow(QMainWindow):
         self.btn_save = QPushButton("💾 Save") 
         self.btn_delete_all = QPushButton("❌ Delete") 
 
-
         self.btn_ok.clicked.connect(self.select_ok_folder)
         self.btn_ng.clicked.connect(self.select_ng_folder)
         self.btn_labels.clicked.connect(self.select_labels_folder)
@@ -153,7 +152,7 @@ class MainWindow(QMainWindow):
         # label label_header
         label_header = QHBoxLayout()
         label_header.addWidget(QLabel("📌 Labels"))
-        self.btn_toggle_all_labels = QPushButton("👁")
+        self.btn_toggle_all_labels = QPushButton("View")
         self.btn_toggle_all_labels.setFixedWidth(50)
         self.btn_toggle_all_labels.setToolTip("Ẩn/Hiện tất cả class")
         self.btn_toggle_all_labels.clicked.connect(self.toggle_all_labels_visibility)
@@ -747,6 +746,7 @@ class MainWindow(QMainWindow):
                 if b["label"] > del_index:
                     b["label"] -= 1
             self.labels.pop(del_index)
+            
             new_hidden = set()
             for hid in self.hidden_labels:
                 if hid == del_index:
