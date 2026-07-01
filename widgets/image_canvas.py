@@ -53,27 +53,24 @@ class ImageCanvas(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHints(QPainter.Antialiasing)
-        
+        painter.save()
         painter.translate(self.offset)
         painter.scale(self.scale, self.scale)
-
         painter.drawPixmap(0, 0, self.pixmap)
 
+        # vẽ box 
         for idx, item in enumerate(self.boxes):
             rect = item["rect"]
-            label_id = item["label"]
-            label_name = str(item.get("label_name", ""))
-            # canvas_rect = self.map_to_canvas(rect)
-            color = self.get_label_color(label_id)
-            if self.selected_box == idx: 
+            color = self.get_label_color(item["label"])
+            if self.selected_box == idx:
                 pen = QPen(Qt.white, 2 / self.scale)
                 fill = QColor(color)
-                fill.setAlpha(120)
+                fill.setAlpha(60)
             else:
-                pen = QPen(color, 1 / self.scale)
+                pen = QPen(color, 2 / self.scale)
                 fill = QColor(color)
-                fill.setAlpha(40)
-            
+                fill.setAlpha(28)          
+
             pen.setCosmetic(False)
             painter.setPen(pen)
             painter.setBrush(fill)
@@ -81,22 +78,52 @@ class ImageCanvas(QWidget):
             if self.selected_box == idx:
                 self.draw_handles(painter, rect, color)
 
-            if label_name:
-                painter.drawText(rect.topLeft() + QPointF(3 / self.scale, -3 / self.scale), label_name)
-
         # drawing bbox(realtime)
-        if self.current_rect: 
+        if self.current_rect:
             rect = self.current_rect.normalized()
-            if self.current_label is not None:
-                color = self.get_label_color(self.current_label)
-            else:
-                color = Qt.red
-            pen = QPen(color, 1 / self.scale)
+            color = self.get_label_color(self.current_label) if self.current_label is not None else QColor(Qt.red)
+            pen = QPen(color, 1.5 / self.scale)
             painter.setPen(pen)
             painter.drawRect(rect)
             self.draw_handles(painter, rect, color)
-    
+        painter.restore()
+        font = painter.font()
+        font.setPixelSize(12)
+        font.setBold(True)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
 
+        for idx, item in enumerate(self.boxes):
+            label_name = str(item.get("label_name", ""))
+            if not label_name:
+                continue
+
+            color = self.get_label_color(item["label"])
+            chip_color = color.darker(115)          # đậm hơn fill để nổi bật, vẫn cùng tông
+            text_color = self.get_contrast_text_color(chip_color)
+
+            rect_canvas = self.map_to_canvas(item["rect"])
+            pad_x, pad_y = 5, 3
+            text_w = metrics.horizontalAdvance(label_name) + pad_x * 2
+            text_h = metrics.height() + pad_y * 2
+
+            chip_x = rect_canvas.left()
+            chip_y = rect_canvas.top() - text_h
+            if chip_y < 0:                          # box sát mép trên -> đặt chip vào trong box
+                chip_y = rect_canvas.top() + 2
+
+            chip_rect = QRectF(chip_x, chip_y, text_w, text_h)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(chip_color)
+            painter.drawRoundedRect(chip_rect, 3, 3)
+
+            painter.setPen(text_color)
+            painter.drawText(
+                chip_rect.adjusted(pad_x, pad_y, -pad_x, -pad_y),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                label_name
+            )
+    
     def map_to_image(self, pos):
         x = (pos.x() - self.offset.x()) / self.scale
         y = (pos.y() - self.offset.y()) / self.scale
@@ -313,7 +340,6 @@ class ImageCanvas(QWidget):
                 self.set_label_cursor(self.current_label)
             else:
                 self.setCursor(Qt.CrossCursor)
-            print("Label Mode")
             return  
         if event.key() == Qt.Key_Escape:
             self.drawing = False
@@ -454,11 +480,16 @@ class ImageCanvas(QWidget):
     def set_label(self, label_id):
         self.current_label = label_id
         
+    # color label
     def get_label_color(self, label_id):
-        hue = (label_id * 37) % 360
+        hue = (label_id * 47) % 360
         color = QColor()
-        color.setHsv(hue, 255, 200)
+        color.setHsv(hue, 160, 235)
         return color
+    # caculator color text constrast
+    def get_contrast_text_color(self, bg_color):
+        luminance = 0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue()
+        return QColor(Qt.black) if luminance > 150 else QColor(Qt.white)
     
     #cursor màu
     def set_label_cursor(self, label_id):
