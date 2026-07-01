@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
 
         self.labels_dir = None
         self.dirty = False
+        self.hidden_labels = set()
         QShortcut(QKeySequence("Ctrl+S"), self, self.save_label)
 
         # self.init_menu()
@@ -136,17 +137,36 @@ class MainWindow(QMainWindow):
 
         # label list 
         self.label_list = QListWidget()
-        self.label_list.itemClicked.connect(self.on_label_selected)
+        self.label_list.itemChanged.connect(self.on_label_visibility_changed)
+        self.label_list.setMinimumWidth(180)
+
+        # box list (danh sách bbox của ảnh hiện tại, click để chọn box trên canvas)
+        self.box_list = QListWidget()
+        self.box_list.itemClicked.connect(self.on_box_item_clicked)
+        self.box_list.setMinimumWidth(180)
+
         # image list 
         self.image_list = QListWidget()
         self.image_list.itemClicked.connect(self.on_image_selected)
-        self.label_list.setMinimumWidth(180)
         self.image_list.setMinimumWidth(180)
 
-        # label layout
+        # label label_header
+        label_header = QHBoxLayout()
+        label_header.addWidget(QLabel("📌 Labels"))
+        self.btn_toggle_all_labels = QPushButton("👁")
+        self.btn_toggle_all_labels.setFixedWidth(50)
+        self.btn_toggle_all_labels.setToolTip("Ẩn/Hiện tất cả class")
+        self.btn_toggle_all_labels.clicked.connect(self.toggle_all_labels_visibility)
+        label_header.addStretch()
+        label_header.addWidget(self.btn_toggle_all_labels)
+        #label_layout
         label_layout = QVBoxLayout()
-        label_layout.addWidget(QLabel("📌 Labels"))
+        label_layout.addLayout(label_header)
         label_layout.addWidget(self.label_list)
+        # box layout (bbox trong ảnh hiện tại)
+        box_layout = QVBoxLayout()
+        box_layout.addWidget(QLabel("🔲 Boxes trong ảnh"))
+        box_layout.addWidget(self.box_list)
         #image layout
         image_layout = QVBoxLayout()
         image_layout.addWidget(QLabel("Images"))
@@ -154,6 +174,7 @@ class MainWindow(QMainWindow):
 
         right_panel = QVBoxLayout()
         right_panel.addLayout(label_layout)
+        right_panel.addLayout(box_layout)
         right_panel.addLayout(image_layout)
         right_panel_widget = QWidget()
         right_panel_widget.setLayout(right_panel)
@@ -176,9 +197,7 @@ class MainWindow(QMainWindow):
     # MENU 
     def init_menu(self):
         menubar = self.menuBar()
-
         file_menu = menubar.addMenu("File")
-
         open_ok = QAction("Open OK Folder", self)
         open_ng = QAction("Open NG Folder", self)
         exit_app = QAction("Exit", self)
@@ -375,7 +394,6 @@ class MainWindow(QMainWindow):
         self.image_info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
     def next_image(self):
-        
         if not self.current_images:
             print('next fail')
             return
@@ -386,7 +404,6 @@ class MainWindow(QMainWindow):
             self.update_image()
 
     def prev_image(self):
-        
         if not self.current_images:
             print('prev fail')
             return
@@ -406,10 +423,9 @@ class MainWindow(QMainWindow):
                 label_id = len(self.labels)
                 self.labels.append(name)
                 self.label_to_id[name] = label_id
-                # self.label_list.addItem(name)
                 self.refresh_label_list()
 
-    def on_label_selected(self, item):
+    def on_box_item_clicked(self, item):
         bbox_index = item.data(Qt.UserRole)
         if bbox_index is None:
             return
@@ -421,6 +437,16 @@ class MainWindow(QMainWindow):
         self.canvas.current_label = label_id
         self.canvas.set_label_cursor(label_id)
         self.canvas.update()
+
+    def on_label_visibility_changed(self, item):
+        label_id = item.data(Qt.UserRole)
+        if label_id is None:
+            return
+        if item.checkState() == Qt.Unchecked:
+            self.hidden_labels.add(label_id)
+        else:
+            self.hidden_labels.discard(label_id)
+        self.canvas.set_hidden_labels(self.hidden_labels)
 
     def on_image_selected(self, item):
         if not self.check_unsaved():
@@ -437,14 +463,30 @@ class MainWindow(QMainWindow):
         self.label_list.blockSignals(True)
         self.label_list.clear()
         self.label_to_id.clear()
-        for idx, name in enumerate(self.labels):
-            self.label_list.addItem(name)
-            self.label_to_id[name] = idx 
+        for i, name in enumerate(self.labels):
+            self.label_to_id[name] = i
+            item = QListWidgetItem(name)
+            item.setData(Qt.UserRole, i)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.Unchecked if i in self.hidden_labels else Qt.Checked
+            )
+            color = self.canvas.get_label_color(i)
+            item.setForeground(QColor(color))     
+            self.label_list.addItem(item)
         self.label_list.blockSignals(False)
 
-    def refresh_label_list_from_boxes(self): 
-        self.label_list.blockSignals(True)
-        self.label_list.clear()
+    def toggle_all_labels_visibility(self):
+        if len(self.hidden_labels) < len(self.labels):
+            self.hidden_labels = set(range(len(self.labels)))   # ẩn hết
+        else:
+            self.hidden_labels.clear()                          # hiện hết
+        self.refresh_label_list()
+        self.canvas.set_hidden_labels(self.hidden_labels)
+
+    def refresh_box_list(self):
+        self.box_list.blockSignals(True)
+        self.box_list.clear()
 
         for idx, box in enumerate(self.canvas.boxes):
             label_id = box["label"]
@@ -453,12 +495,13 @@ class MainWindow(QMainWindow):
             else:
                 label_name = str(label_id)
 
-            item = QListWidgetItem(label_name)
-            item.setData(Qt.UserRole, idx)
-            self.label_list.addItem(item)
+            item = QListWidgetItem(f"#{idx + 1}  {label_name}")
+            item.setData(Qt.UserRole, idx)   # idx ở đây LÀ box index, dùng đúng chỗ
+            color = self.canvas.get_label_color(label_id)
+            item.setForeground(QColor(color))
+            self.box_list.addItem(item)
 
-        self.label_list.blockSignals(False)
-        
+        self.box_list.blockSignals(False)
 
     def on_box_created(self, rect:QRectF):
         dialog = SelectLabelDialog(self.labels)
@@ -487,6 +530,7 @@ class MainWindow(QMainWindow):
         })
         self.dirty = True
         self.update_window_title()
+        self.refresh_box_list()
         self.canvas.update()
         log.info(
             f"Create bbox | label={label_id}({label_name})"
@@ -496,14 +540,14 @@ class MainWindow(QMainWindow):
     def on_boxes_changed(self):
         self.dirty = True
         self.setWindowTitle("*" + self.windowTitle().lstrip("*"))
+        self.refresh_box_list()
 
     def on_canvas_box_selected(self, idx):
         if idx < 0 or idx >= self.label_list.count():
             return
-        self.label_list.blockSignals(True)
-        self.label_list.setCurrentRow(idx)
-        self.label_list.blockSignals(False)
-       
+        self.box_list.blockSignals(True)
+        self.box_list.setCurrentRow(idx)
+        self.box_list.blockSignals(False)
     
     def check_unsaved(self):
         if not self.dirty:
@@ -596,6 +640,7 @@ class MainWindow(QMainWindow):
                 self.canvas.boxes.clear()
                 self.canvas.update()
                 self.image_list.clear()
+                self.box_list.clear()
                 self.current_index = -1
                 self.dirty = False
                 self.update_window_title()
@@ -617,7 +662,6 @@ class MainWindow(QMainWindow):
                 "Error",
                 f"Failed to delete image: \n{str(e)}"
             )
-
         return
         
     def save_classes_file(self):
@@ -703,17 +747,24 @@ class MainWindow(QMainWindow):
                 if b["label"] > del_index:
                     b["label"] -= 1
             self.labels.pop(del_index)
+            new_hidden = set()
+            for hid in self.hidden_labels:
+                if hid == del_index:
+                    continue
+                new_hidden.add(hid-1 if hid > del_index else hid)
+            self.hidden_labels = new_hidden
+            self.canvas.set_hidden_labels(self.hidden_labels)
             self.refresh_label_list()
             self.canvas.selected_box = None
+        self.refresh_box_list()
         self.canvas.update()
         log.info(f"Edit label on box index={box_index}")
         log.info(f"Action={action}, Result={result}")
 
-
     # load label
     def load_label_file(self, image_path):
         self.canvas.boxes.clear()
-
+        self.refresh_box_list()
         if not self.labels_dir or not self.canvas.pixmap:
             return
         image_name = os.path.splitext(os.path.basename(image_path))[0]
@@ -757,7 +808,7 @@ class MainWindow(QMainWindow):
                     "rect": rect,
                     "selected": False
                 })
-        self.refresh_label_list_from_boxes()
+        self.refresh_label_list()
         self.canvas.update()
 
     def auto_label(self):

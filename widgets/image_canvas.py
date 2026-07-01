@@ -33,6 +33,7 @@ class ImageCanvas(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
         self.panning = False
         self.last_pan_pos = None
+        self.hidden_labels = set()
 
     def load_image(self, path):
         self.pixmap = QPixmap(path)
@@ -50,7 +51,7 @@ class ImageCanvas(QWidget):
     def paintEvent(self, event):
         if not self.pixmap:
             return
-
+        
         painter = QPainter(self)
         painter.setRenderHints(QPainter.Antialiasing)
         painter.save()
@@ -60,6 +61,8 @@ class ImageCanvas(QWidget):
 
         # vẽ box 
         for idx, item in enumerate(self.boxes):
+            if item["label"] in self.hidden_labels:
+                continue
             rect = item["rect"]
             color = self.get_label_color(item["label"])
             if self.selected_box == idx:
@@ -94,29 +97,27 @@ class ImageCanvas(QWidget):
         metrics = painter.fontMetrics()
 
         for idx, item in enumerate(self.boxes):
+            if item["label"] in self.hidden_labels:   
+                continue
             label_name = str(item.get("label_name", ""))
             if not label_name:
                 continue
-
             color = self.get_label_color(item["label"])
-            chip_color = color.darker(115)          # đậm hơn fill để nổi bật, vẫn cùng tông
+            chip_color = color.darker(115)          
             text_color = self.get_contrast_text_color(chip_color)
-
             rect_canvas = self.map_to_canvas(item["rect"])
             pad_x, pad_y = 5, 3
             text_w = metrics.horizontalAdvance(label_name) + pad_x * 2
             text_h = metrics.height() + pad_y * 2
-
             chip_x = rect_canvas.left()
             chip_y = rect_canvas.top() - text_h
-            if chip_y < 0:                          # box sát mép trên -> đặt chip vào trong box
+            if chip_y < 0:                          
                 chip_y = rect_canvas.top() + 2
 
             chip_rect = QRectF(chip_x, chip_y, text_w, text_h)
             painter.setPen(Qt.NoPen)
             painter.setBrush(chip_color)
             painter.drawRoundedRect(chip_rect, 3, 3)
-
             painter.setPen(text_color)
             painter.drawText(
                 chip_rect.adjusted(pad_x, pad_y, -pad_x, -pad_y),
@@ -310,6 +311,13 @@ class ImageCanvas(QWidget):
         
         self.scale = self.fit_scale()
         self.pan_offset = QPoint(0,0)
+        self.update()
+
+    def set_hidden_labels(self, hidden_ids):
+        self.hidden_labels = set(hidden_ids)
+        if self.selected_box is not None:
+            if self.boxes[self.selected_box]["label"] in self.hidden_labels:
+                self.selected_box = None
         self.update()
 
     def keyPressEvent(self, event):
@@ -516,7 +524,6 @@ class ImageCanvas(QWidget):
             self.setCursor(Qt.ArrowCursor)
     # resize auto scale
     def resizeEvent(self, event):
-        
         if self.pixmap:
             if self.scale <= self.fit_scale():
                 self.fit_to_window()
@@ -586,7 +593,8 @@ class ImageCanvas(QWidget):
         return[
             {
                 "rect": QRectF(box["rect"]),
-                "label": box["label"]
+                "label": box["label"],
+                "label_name": box.get("label_name", "")
             }
             for box in self.boxes
         ]
