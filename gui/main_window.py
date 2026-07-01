@@ -746,7 +746,7 @@ class MainWindow(QMainWindow):
                 if b["label"] > del_index:
                     b["label"] -= 1
             self.labels.pop(del_index)
-            
+
             new_hidden = set()
             for hid in self.hidden_labels:
                 if hid == del_index:
@@ -808,7 +808,7 @@ class MainWindow(QMainWindow):
                     "rect": rect,
                     "selected": False
                 })
-        self.refresh_label_list()
+        self.refresh_box_list()
         self.canvas.update()
 
     def auto_label(self):
