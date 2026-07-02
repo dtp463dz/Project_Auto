@@ -9,6 +9,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QRect, QRectF, QSettings
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QColor
 
+from gui.theme import get_theme_qss
+from gui.logger import setup_logger
 from libs.file_lib import FileLib
 from libs.edit_lib import EditLib
 from libs.view_lib import ViewLib
@@ -20,8 +22,6 @@ from dialog.new_label_dialog import NewLabelDialog
 from dialog.loading_dialog import LoadingDialog
 from logic.auto_label_worker import AutoLabelWorker
 from logic.auto_label_logic import AutoLabelLogic
-from gui.logger import setup_logger
-from gui.theme import get_theme_qss
 log = setup_logger()
 
 class MainWindow(QMainWindow):
@@ -50,6 +50,9 @@ class MainWindow(QMainWindow):
         self.current_theme = self.settings.value("theme", "light")
 
         QShortcut(QKeySequence("Ctrl+S"), self, self.save_label)
+        QShortcut(QKeySequence("Ctrl+Z"), self, self.canvas.undo)
+        QShortcut(QKeySequence("Ctrl+Y"), self, self.canvas.redo)
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self, self.canvas.redo)
 
         # self.init_menu()
         self.init_ui()
@@ -60,10 +63,9 @@ class MainWindow(QMainWindow):
         central_widget = QWidget(self)
         # status bar
         self.create_status_bar()
-        # Theme toggle
         self.btn_theme_toggle = QPushButton()
         self.btn_theme_toggle.setFixedWidth(110)
-        self.btn_theme_toggle.setToolTip("Chuyển đổi giao diện Sáng/Tối")
+        self.btn_theme_toggle.setToolTip("Chuyển đổi giao diện Sáng / Tối")
         self.btn_theme_toggle.clicked.connect(self.toggle_theme)
         self._update_theme_button_text()
 
@@ -126,7 +128,7 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.btn_delete_all)
         control_layout.addStretch()
 
-        # label list 
+        # label list (danh sách toàn bộ class của project, có checkbox ẩn/hiện)
         self.label_list = QListWidget()
         self.label_list.itemChanged.connect(self.on_label_visibility_changed)
         self.label_list.setMinimumWidth(180)
@@ -141,7 +143,7 @@ class MainWindow(QMainWindow):
         self.image_list.itemClicked.connect(self.on_image_selected)
         self.image_list.setMinimumWidth(180)
 
-        # label label_header
+        # label layout
         label_header = QHBoxLayout()
         label_header.addWidget(QLabel("📌 Labels"))
         self.btn_toggle_all_labels = QPushButton("View")
@@ -150,7 +152,7 @@ class MainWindow(QMainWindow):
         self.btn_toggle_all_labels.clicked.connect(self.toggle_all_labels_visibility)
         label_header.addStretch()
         label_header.addWidget(self.btn_toggle_all_labels)
-        #label_layout
+
         label_layout = QVBoxLayout()
         label_layout.addLayout(label_header)
         label_layout.addWidget(self.label_list)
@@ -423,7 +425,6 @@ class MainWindow(QMainWindow):
             return
         if bbox_index >= len(self.canvas.boxes):
             return
-        
         self.canvas.selected_box = bbox_index
         label_id = self.canvas.boxes[bbox_index]["label"]
         self.canvas.current_label = label_id
@@ -450,8 +451,7 @@ class MainWindow(QMainWindow):
                 self.update_image()
                 self.load_label_file(path)
                 break
-    
-    # set THEME
+    # THEME
     def apply_theme(self, theme_name):
         self.current_theme = theme_name
         self.setStyleSheet(get_theme_qss(theme_name))
@@ -480,7 +480,7 @@ class MainWindow(QMainWindow):
                 Qt.Unchecked if i in self.hidden_labels else Qt.Checked
             )
             color = self.canvas.get_label_color(i)
-            item.setForeground(QColor(color))     
+            item.setForeground(QColor(color))
             self.label_list.addItem(item)
         self.label_list.blockSignals(False)
 
@@ -551,7 +551,7 @@ class MainWindow(QMainWindow):
         self.refresh_box_list()
 
     def on_canvas_box_selected(self, idx):
-        if idx < 0 or idx >= self.label_list.count():
+        if idx < 0 or idx >= self.box_list.count():
             return
         self.box_list.blockSignals(True)
         self.box_list.setCurrentRow(idx)
@@ -756,11 +756,12 @@ class MainWindow(QMainWindow):
                     b["label"] -= 1
             self.labels.pop(del_index)
 
+            # giữ hidden_labels đồng bộ id sau khi xóa 1 label (id phía sau bị lùi 1)
             new_hidden = set()
             for hid in self.hidden_labels:
                 if hid == del_index:
                     continue
-                new_hidden.add(hid-1 if hid > del_index else hid)
+                new_hidden.add(hid - 1 if hid > del_index else hid)
             self.hidden_labels = new_hidden
             self.canvas.set_hidden_labels(self.hidden_labels)
             self.refresh_label_list()
