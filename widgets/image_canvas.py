@@ -130,6 +130,13 @@ class ImageCanvas(QWidget):
         x = (pos.x() - self.offset.x()) / self.scale
         y = (pos.y() - self.offset.y()) / self.scale
         return QPoint(int(x), int(y))
+
+    def map_to_image_f(self, pos):
+        """Giống map_to_image nhưng giữ nguyên độ chính xác float -
+        bắt buộc dùng cho zoom-to-cursor để tránh lệch tâm cộng dồn qua nhiều lần zoom."""
+        x = (pos.x() - self.offset.x()) / self.scale
+        y = (pos.y() - self.offset.y()) / self.scale
+        return QPointF(x, y)
     
     def map_to_canvas(self, rect: QRectF):
         x = rect.left() * self.scale + self.offset.x()
@@ -451,13 +458,18 @@ class ImageCanvas(QWidget):
         if not self.pixmap:
             return
         if event.modifiers() & Qt.ControlModifier:
-            mouse_pos = event.pos()
-            old_pos = self.map_to_image(mouse_pos)
+            mouse_pos = QPointF(event.pos())
+            old_pos = self.map_to_image_f(mouse_pos)
             zoom_factor = 1.25
             min_scale = self.fit_scale()
+            max_scale = min_scale * 20   # đồng bộ giới hạn zoom tối đa với _zoom_around_center
 
             if event.angleDelta().y() > 0:
-                self.scale *= zoom_factor
+                new_scale = self.scale * zoom_factor
+                if new_scale >= max_scale:
+                    self.scale = max_scale
+                else:
+                    self.scale = new_scale
             else:
                 new_scale = self.scale / zoom_factor
                 if new_scale <= min_scale:
@@ -467,32 +479,41 @@ class ImageCanvas(QWidget):
                     return
                 else:
                     self.scale = new_scale
-            
-            new_pos = self.map_to_image(mouse_pos)
-            delta = new_pos - old_pos
-            self.offset += QPointF(
-                delta.x() * self.scale,
-                delta.y() * self.scale
-            )
+
+            new_offset_x = mouse_pos.x() - old_pos.x() * self.scale
+            new_offset_y = mouse_pos.y() - old_pos.y() * self.scale
+            self.offset = QPointF(new_offset_x, new_offset_y)
             self.clamp_offset()
             self.update()
 
     def zoom_in(self):
-        self.scale *= 1.1
-        self.update()
+        self._zoom_around_center(1.25)
 
     def zoom_out(self):
+        self._zoom_around_center(1 / 1.25)
+
+    def _zoom_around_center(self, factor):
+        """Zoom neo theo tâm canvas - dùng chung cho nút bấm/menu/phím tắt +/-,
+        cùng cơ chế giữ-điểm-neo như wheelEvent để trải nghiệm nhất quán."""
         if not self.pixmap:
             return
+        center = QPointF(self.width() / 2, self.height() / 2)
+        anchor_img = self.map_to_image_f(center)
         min_scale = self.fit_scale()
-        new_scale = self.scale * 0.9
-        if new_scale < min_scale:
-            new_scale = min_scale
+        max_scale = min_scale * 20   # giới hạn zoom tối đa 20x so với fit-to-window
+        new_scale = self.scale * factor
+        new_scale = max(min_scale, min(new_scale, max_scale))
         if new_scale == self.scale:
             return
         self.scale = new_scale
-        if self.scale == min_scale:
-            self.pan_offset = QPoint(0, 0)
+        if self.scale <= min_scale:
+            self.center_image()
+        else:
+            self.offset = QPointF(
+                center.x() - anchor_img.x() * self.scale,
+                center.y() - anchor_img.y() * self.scale
+            )
+            self.clamp_offset()
         self.update()
 
     def set_label(self, label_id):
