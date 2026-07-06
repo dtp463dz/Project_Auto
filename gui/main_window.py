@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         self.labels_dir = None
         self.dirty = False
         self.hidden_labels = set()
+        self.last_label_id = None   # nhớ class vừa chọn để tự tick sẵn cho bbox tiếp theo
 
         self.settings = QSettings("TPLabel", "TPLabelApp")
         self.current_theme = self.settings.value("theme", "light")
@@ -89,6 +90,7 @@ class MainWindow(QMainWindow):
         self.canvas.box_double_clicked.connect(self.on_edit_label)
         self.canvas.key_next_pressed.connect(self.next_image)
         self.canvas.key_prev_pressed.connect(self.prev_image)
+        self.canvas.crosshair_pos_changed.connect(self.on_crosshair_pos_changed)
 
         # control buttons 
         self.btn_ok = QPushButton("📂 OK Folder")
@@ -345,7 +347,7 @@ class MainWindow(QMainWindow):
         for img in self.current_images:
             name = os.path.basename(img)
             item = QListWidgetItem(name)
-            item.setData(Qt.UserRole, img)   
+            item.setData(Qt.UserRole, img)   # lưu path thật, không phụ thuộc text hiển thị
             if self.has_label(img):
                 item.setText(f"✅ {name}")
                 item.setForeground(QColor("#2E7D32"))   # xanh: đã gắn nhãn
@@ -444,6 +446,7 @@ class MainWindow(QMainWindow):
 
     def on_image_selected(self, item):
         if not self.check_unsaved():
+            # revert lại dòng đang chọn về đúng ảnh hiện tại (tránh lệch UI vs dữ liệu)
             self.image_list.blockSignals(True)
             self.image_list.setCurrentRow(self.current_index)
             self.image_list.blockSignals(False)
@@ -514,7 +517,7 @@ class MainWindow(QMainWindow):
         self.box_list.blockSignals(False)
 
     def on_box_created(self, rect:QRectF):
-        dialog = SelectLabelDialog(self.labels)
+        dialog = SelectLabelDialog(self.labels, current=self.last_label_id)
         if not dialog.exec_():
             return
         action, result = dialog.get_result()
@@ -532,6 +535,7 @@ class MainWindow(QMainWindow):
             label_id = self.labels.index(label_name)
         else:
             return
+        self.last_label_id = label_id   # nhớ lại cho lần vẽ bbox kế tiếp
         self.canvas.boxes.append({
             "label": label_id,
             "label_name": label_name,
@@ -558,6 +562,12 @@ class MainWindow(QMainWindow):
         self.box_list.blockSignals(True)
         self.box_list.setCurrentRow(idx)
         self.box_list.blockSignals(False)
+    def on_crosshair_pos_changed(self, pos):
+        """Hiển thị toạ độ X/Y ở status bar khi đang ở chế độ vẽ bbox (phím W), giống labelImg."""
+        if pos is None:
+            self.statusBar().clearMessage()
+        else:
+            self.statusBar().showMessage(f"X: {pos.x()}    Y: {pos.y()}")
     
     def check_unsaved(self):
         if not self.dirty:
@@ -718,6 +728,7 @@ class MainWindow(QMainWindow):
             label_name = self.labels[label_id]
             item["label"] = label_id
             item["label_name"] = label_name
+            self.last_label_id = label_id
         elif action == "new": 
             name = result
             if name in self.labels:
@@ -728,6 +739,7 @@ class MainWindow(QMainWindow):
             label_id = len(self.labels) - 1
             item["label"] = label_id
             item["label_name"] = name
+            self.last_label_id = label_id
             self.canvas.update()
         elif action == "edit":
             idx, new_name = result
@@ -766,6 +778,13 @@ class MainWindow(QMainWindow):
                 new_hidden.add(hid - 1 if hid > del_index else hid)
             self.hidden_labels = new_hidden
             self.canvas.set_hidden_labels(self.hidden_labels)
+            # đồng bộ last_label_id sau khi xóa 1 label (tránh trỏ nhầm sang class khác)
+            if self.last_label_id is not None:
+                if self.last_label_id == del_index:
+                    self.last_label_id = None
+                elif self.last_label_id > del_index:
+                    self.last_label_id -= 1
+
             self.refresh_label_list()
             self.canvas.selected_box = None
         self.refresh_box_list()

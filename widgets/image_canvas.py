@@ -12,6 +12,7 @@ class ImageCanvas(QWidget):
     box_selected = pyqtSignal(int)
     key_next_pressed = pyqtSignal()
     key_prev_pressed = pyqtSignal()
+    crosshair_pos_changed = pyqtSignal(object)   # QPoint (toạ độ ảnh) hoặc None khi tắt/rời khỏi canvas
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,6 +36,7 @@ class ImageCanvas(QWidget):
         self.last_pan_pos = None
         self.hidden_labels = set()
         self._real_change = False   # True chỉ khi mousePressEvent->mouseMoveEvent thực sự làm thay đổi rect (không phải chỉ click chọn)
+        self.mouse_pos = None        # vị trí chuột (toạ độ canvas/màn hình) - dùng vẽ crosshair khi đang ở chế độ vẽ bbox
 
     def load_image(self, path):
         self.pixmap = QPixmap(path)
@@ -91,6 +93,15 @@ class ImageCanvas(QWidget):
             painter.drawRect(rect)
             self.draw_handles(painter, rect, color)
         painter.restore()
+        # crosshair + hỗ trợ định vị khi đang ở chế độ vẽ bbox (phím W) - tham khảo labelImg
+        if self.drawing and self.mouse_pos is not None:
+            pen = QPen(QColor(255, 60, 60, 200), 1, Qt.DashLine)
+            painter.setPen(pen)
+            x = self.mouse_pos.x()
+            y = self.mouse_pos.y()
+            painter.drawLine(x, 0, x, self.height())
+            painter.drawLine(0, y, self.width(), y)
+
         font = painter.font()
         font.setPixelSize(12)
         font.setBold(True)
@@ -210,6 +221,11 @@ class ImageCanvas(QWidget):
             return
         
         pos_img = self.map_to_image(event.pos())
+        # cập nhật crosshair + phát toạ độ ảnh ra ngoài (MainWindow hiển thị ở status bar)
+        if self.drawing:
+            self.mouse_pos = event.pos()
+            self.crosshair_pos_changed.emit(pos_img)
+            self.update()
         # resize bbox
         if self.resize_mode and self.selected_box is not None:
             if not self._real_change:
@@ -311,8 +327,17 @@ class ImageCanvas(QWidget):
         self.current_rect = None
         self.start_pos = None
         self.drawing = False
+        self.mouse_pos = None
+        self.crosshair_pos_changed.emit(None)
         self.update_cursor(event.pos())
         self.update()
+
+    def leaveEvent(self, event):
+        if self.drawing and self.mouse_pos is not None:
+            self.mouse_pos = None
+            self.crosshair_pos_changed.emit(None)
+            self.update()
+        super().leaveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if not self.pixmap:
@@ -370,7 +395,10 @@ class ImageCanvas(QWidget):
             return  
         if event.key() == Qt.Key_Escape:
             self.drawing = False
+            self.mouse_pos = None
+            self.crosshair_pos_changed.emit(None)
             self.setCursor(Qt.ArrowCursor)
+            self.update()
         
         if event.key() == Qt.Key_Delete:
             if self.selected_box is not None:
