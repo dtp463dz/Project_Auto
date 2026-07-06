@@ -345,6 +345,7 @@ class MainWindow(QMainWindow):
         for img in self.current_images:
             name = os.path.basename(img)
             item = QListWidgetItem(name)
+            item.setData(Qt.UserRole, img)   
             if self.has_label(img):
                 item.setText(f"✅ {name}")
                 item.setForeground(QColor("#2E7D32"))   # xanh: đã gắn nhãn
@@ -443,14 +444,15 @@ class MainWindow(QMainWindow):
 
     def on_image_selected(self, item):
         if not self.check_unsaved():
+            self.image_list.blockSignals(True)
+            self.image_list.setCurrentRow(self.current_index)
+            self.image_list.blockSignals(False)
             return
-        name = item.text()
-        for i, path in enumerate(self.current_images):
-            if os.path.basename(path) == name:
-                self.current_index = i
-                self.update_image()
-                self.load_label_file(path)
-                break
+        path = item.data(Qt.UserRole)
+        if not path or path not in self.current_images:
+            return
+        self.current_index = self.current_images.index(path)
+        self.update_image()
     # THEME
     def apply_theme(self, theme_name):
         self.current_theme = theme_name
