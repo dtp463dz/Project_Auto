@@ -856,7 +856,7 @@ class MainWindow(QMainWindow):
             f for f in os.listdir(image_dir)
             if f.lower().endswith((".jpg", ".png", ".jpeg"))
         ])
-        ok = DialogLib.confirm(
+        ok, conf = DialogLib.confirm(
             self,
             image_count,
             model_path,
@@ -873,7 +873,8 @@ class MainWindow(QMainWindow):
             self.logic,
             image_dir, 
             model_path,
-            label_dir
+            label_dir,
+            conf
         )
         self.worker.finished_signal.connect(self.on_auto_label_done)
         self.worker.error_signal.connect(self.on_auto_label_error)
