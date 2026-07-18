@@ -865,9 +865,6 @@ class MainWindow(QMainWindow):
         if not ok:
             return
 
-        #show loading
-        self.loading = LoadingDialog(self)
-        self.loading.show()
         #start worker
         self.worker = AutoLabelWorker(
             self.logic,
@@ -876,17 +873,35 @@ class MainWindow(QMainWindow):
             label_dir,
             conf
         )
+        self._auto_label_cancelled = False
+
+        #show loading (nút Hủy gọi thẳng vào worker.request_stop())
+        self.loading = LoadingDialog(self, on_cancel=self._on_auto_label_cancel_requested)
+        self.loading.show()
+
+        self.worker.progress_signal.connect(self.loading.update_progress)
         self.worker.finished_signal.connect(self.on_auto_label_done)
         self.worker.error_signal.connect(self.on_auto_label_error)
         self.worker.start()
 
+    def _on_auto_label_cancel_requested(self):
+        self._auto_label_cancelled = True
+        self.worker.request_stop()
+
     def on_auto_label_done(self, total):
         self.loading.close()
-        QMessageBox.information(
-            self,
-            "Done",
-            f"✅ Auto label hoàn tất\n{total} ảnh"
-        )
+        if self._auto_label_cancelled:
+            QMessageBox.information(
+                self,
+                "Đã hủy",
+                f"⏹ Auto label đã dừng theo yêu cầu\n{total} ảnh đã xử lý xong (vẫn được giữ lại)"
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Done",
+                f"✅ Auto label hoàn tất\n{total} ảnh"
+            )
 
     def on_auto_label_error(self, error):
         self.loading.close()
