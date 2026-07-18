@@ -16,7 +16,12 @@ class AutoLabelLogic:
                 raise ValueError("Model path is not set.")
             self.model = YOLO(model_path)
 
-    def run(self, image_dir, model_path, label_dir, conf = 0.4):
+    def run(self, image_dir, model_path, label_dir, conf = 0.4,
+            progress_callback=None, should_stop=None):
+        """
+        progress_callback(done, total, filename) - gọi sau khi xử lý xong mỗi ảnh.
+        should_stop() -> bool - nếu trả True, dừng sớm (ảnh đã xử lý vẫn giữ nguyên).
+        """
 
         if not os.path.exists(label_dir):
             os.makedirs(label_dir)
@@ -34,7 +39,12 @@ class AutoLabelLogic:
             if f.lower().endswith((".jpg", ".png", ".jpeg"))
         ]
 
+        total = len(images)
+        done = 0
         for filename in images:
+            if should_stop is not None and should_stop():
+                break
+
             image_path = os.path.join(image_dir, filename)
             results = self.model(image_path, conf=conf)
 
@@ -56,6 +66,7 @@ class AutoLabelLogic:
                                 f"{x/w:.6f} {y/h:.6f} "
                                 f"{bw/w:.6f} {bh/h:.6f}\n"
                             )
-        return len(images)
-
-
+            done += 1
+            if progress_callback is not None:
+                progress_callback(done, total, filename)
+        return done
