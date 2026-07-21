@@ -533,6 +533,21 @@ class MainWindow(QMainWindow):
                 self.labels.append(label_name)
                 self.refresh_label_list()
             label_id = self.labels.index(label_name)
+        elif action == "edit":
+            idx, new_name = result
+            new_name = new_name.strip()
+            if new_name:
+                if new_name in self.labels and self.labels[idx] != new_name:
+                    QMessageBox.warning(self, "Error", "Label name already exists")
+                else:
+                    self._apply_label_rename(idx, new_name)
+            # box vừa vẽ chưa gán nhãn nào - không thêm vào canvas, người dùng vẽ lại nếu cần
+            return
+        elif action == "delete":
+            del_index = result
+            self._apply_label_delete(del_index)
+            # box vừa vẽ chưa gán nhãn nào - không thêm vào canvas, người dùng vẽ lại nếu cần
+            return
         else:
             return
         self.last_label_id = label_id   # nhớ lại cho lần vẽ bbox kế tiếp
@@ -713,6 +728,124 @@ class MainWindow(QMainWindow):
         self.refresh_label_list() 
 
     # edit label
+    # ---------- helper dùng chung cho rename/delete label (gọi từ cả
+    # on_edit_label lẫn on_box_created, vì cả 2 đều mở SelectLabelDialog) ----------
+    def _cascade_delete_label_from_files(self, del_index, skip_image_path=None):
+        """Xóa/dồn id label trong TẤT CẢ file .txt trong labels_dir (trừ classes.txt
+        và ảnh đang mở - ảnh đang mở xử lý qua bộ nhớ + Save như bình thường)."""
+        if not self.labels_dir or not os.path.isdir(self.labels_dir):
+            return
+        skip_name = None
+        if skip_image_path:
+            skip_name = os.path.splitext(os.path.basename(skip_image_path))[0] + ".txt"
+
+        for fname in os.listdir(self.labels_dir):
+            if not fname.lower().endswith(".txt") or fname == "classes.txt":
+                continue
+            if fname == skip_name:
+                continue
+            fpath = os.path.join(self.labels_dir, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            except Exception as e:
+                log.warning(f"Không đọc được {fpath}: {e}")
+                continue
+
+            new_lines = []
+            changed = False
+            for line in lines:
+                parts = line.strip().split()
+                if len(parts) != 5:
+                    new_lines.append(line)
+                    continue
+                try:
+                    cls_id = int(parts[0])
+                except ValueError:
+                    new_lines.append(line)
+                    continue
+                if cls_id == del_index:
+                    changed = True   # xóa hẳn dòng này
+                    continue
+                elif cls_id > del_index:
+                    parts[0] = str(cls_id - 1)
+                    new_lines.append(" ".join(parts) + "\n")
+                    changed = True
+                else:
+                    new_lines.append(line)
+
+            if changed:
+                try:
+                    with open(fpath, "w", encoding="utf-8") as f:
+                        f.writelines(new_lines)
+                    log.info(f"Đồng bộ xóa label id={del_index} trong {fpath}")
+                except Exception as e:
+                    log.warning(f"Không ghi được {fpath}: {e}")
+
+    def _apply_label_delete(self, del_index):
+        """Xóa 1 label khỏi project: cập nhật self.labels, boxes ảnh đang mở,
+        classes.txt, và toàn bộ file .txt khác trong labels_dir."""
+        current_image_path = None
+        if 0 <= self.current_index < len(self.current_images):
+            current_image_path = self.current_images[self.current_index]
+
+        # bỏ chọn box TRƯỚC khi đụng vào set_hidden_labels/boxes - tránh IndexError
+        # khi box đang chọn chính là box thuộc label vừa xóa
+        self.canvas.selected_box = None
+
+        # xóa bbox thuộc label đó trong ảnh đang mở + dồn id các box còn lại
+        self.canvas.boxes = [
+            b for b in self.canvas.boxes if b["label"] != del_index
+        ]
+        for b in self.canvas.boxes:
+            if b["label"] > del_index:
+                b["label"] -= 1
+
+        self.labels.pop(del_index)
+
+        # đồng bộ hidden_labels (id phía sau bị lùi 1)
+        new_hidden = set()
+        for hid in self.hidden_labels:
+            if hid == del_index:
+                continue
+            new_hidden.add(hid - 1 if hid > del_index else hid)
+        self.hidden_labels = new_hidden
+        self.canvas.set_hidden_labels(self.hidden_labels)
+
+        # đồng bộ last_label_id
+        if self.last_label_id is not None:
+            if self.last_label_id == del_index:
+                self.last_label_id = None
+            elif self.last_label_id > del_index:
+                self.last_label_id -= 1
+
+        # xóa/dồn id trong toàn bộ .txt khác + lưu classes.txt ngay lập tức
+        # (đây là thay đổi cấu trúc toàn project, không đợi bấm Save)
+        self._cascade_delete_label_from_files(del_index, skip_image_path=current_image_path)
+        self.save_classes_file()
+
+        self.refresh_label_list()
+        self.refresh_box_list()
+        self.canvas.update()
+
+        # ảnh đang mở vẫn cần Save bình thường để ghi lại boxes đã lọc
+        self.dirty = True
+        self.update_window_title()
+
+    def _apply_label_rename(self, idx, new_name):
+        """Đổi tên label, GIỮ NGUYÊN vị trí/id - vì file .txt chỉ lưu id, không
+        lưu tên, nên chỉ cần cập nhật classes.txt, không cần đụng file .txt nào khác."""
+        self.labels[idx] = new_name
+        self.refresh_label_list()
+        for b in self.canvas.boxes:
+            if b["label"] == idx:
+                b["label_name"] = new_name
+        self.save_classes_file()   # lưu ngay - đây là thay đổi cấu trúc toàn project
+        self.refresh_box_list()
+        self.canvas.update()
+        self.dirty = True
+        self.update_window_title()
+
     def on_edit_label(self, box_index):
         item = self.canvas.boxes[box_index]
         dialog = SelectLabelDialog(
@@ -729,6 +862,8 @@ class MainWindow(QMainWindow):
             item["label"] = label_id
             item["label_name"] = label_name
             self.last_label_id = label_id
+            self.dirty = True
+            self.update_window_title()
         elif action == "new": 
             name = result
             if name in self.labels:
@@ -740,6 +875,8 @@ class MainWindow(QMainWindow):
             item["label"] = label_id
             item["label_name"] = name
             self.last_label_id = label_id
+            self.dirty = True
+            self.update_window_title()
             self.canvas.update()
         elif action == "edit":
             idx, new_name = result
@@ -750,43 +887,10 @@ class MainWindow(QMainWindow):
             if new_name in self.labels and self.labels[idx] != new_name:
                 QMessageBox.warning(self, "Error", "Label name already exists")
                 return
-            self.labels[idx] = new_name
-            self.refresh_label_list()
-            # update tất cả bbox dùng label đó
-            for b in self.canvas.boxes:
-                if b["label"] == idx:
-                    b["label_name"] = new_name
+            self._apply_label_rename(idx, new_name)
         elif action == "delete":
             del_index = result
-            # xóa bbox thuộc label đó
-            self.canvas.boxes = [
-                b for b in self.canvas.boxes
-                if b["label"] != del_index
-            ]
-
-            # update label id phía sau
-            for b in self.canvas.boxes:
-                if b["label"] > del_index:
-                    b["label"] -= 1
-            self.labels.pop(del_index)
-
-            # giữ hidden_labels đồng bộ id sau khi xóa 1 label (id phía sau bị lùi 1)
-            new_hidden = set()
-            for hid in self.hidden_labels:
-                if hid == del_index:
-                    continue
-                new_hidden.add(hid - 1 if hid > del_index else hid)
-            self.hidden_labels = new_hidden
-            self.canvas.set_hidden_labels(self.hidden_labels)
-            # đồng bộ last_label_id sau khi xóa 1 label (tránh trỏ nhầm sang class khác)
-            if self.last_label_id is not None:
-                if self.last_label_id == del_index:
-                    self.last_label_id = None
-                elif self.last_label_id > del_index:
-                    self.last_label_id -= 1
-
-            self.refresh_label_list()
-            self.canvas.selected_box = None
+            self._apply_label_delete(del_index)
         self.refresh_box_list()
         self.canvas.update()
         log.info(f"Edit label on box index={box_index}")

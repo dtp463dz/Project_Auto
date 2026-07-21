@@ -360,7 +360,9 @@ class ImageCanvas(QWidget):
     def set_hidden_labels(self, hidden_ids):
         self.hidden_labels = set(hidden_ids)
         if self.selected_box is not None:
-            if self.boxes[self.selected_box]["label"] in self.hidden_labels:
+            if self.selected_box >= len(self.boxes):
+                self.selected_box = None
+            elif self.boxes[self.selected_box]["label"] in self.hidden_labels:
                 self.selected_box = None
         self.update()
 
