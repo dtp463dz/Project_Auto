@@ -154,6 +154,111 @@ QMessageBox {
 QMessageBox QLabel {
     color: #1F2937;
 }
+
+/* --- Nút điều hướng/thiết lập (trung tính, không nổi bật bằng nút hành động chính) --- */
+QPushButton#navBtn {
+    background: #FFFFFF;
+    border: 1px solid #CBD8EC;
+    color: #33415C;
+}
+QPushButton#navBtn:hover {
+    background: #EAF1FD;
+    border: 1px solid #A9C3EA;
+}
+QPushButton#navBtn:pressed {
+    background: #DCE8FB;
+}
+
+/* --- Nút Save: xanh lá, hành động an toàn/tích cực --- */
+QPushButton#successBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #4CAF7D,
+        stop:1 #379968
+    );
+}
+QPushButton#successBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #5FC091,
+        stop:1 #4CAF7D
+    );
+}
+QPushButton#successBtn:pressed {
+    background: #2E8058;
+}
+
+/* --- Nút Delete: đỏ, cảnh báo hành động phá huỷ --- */
+QPushButton#dangerBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #E5766F,
+        stop:1 #D9564D
+    );
+}
+QPushButton#dangerBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #EE8B85,
+        stop:1 #E5766F
+    );
+}
+QPushButton#dangerBtn:pressed {
+    background: #C24940;
+}
+
+/* --- Tiêu đề nhóm nút bên trái + đường phân cách --- */
+QLabel#sectionTitle {
+    color: #7C8AA8;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding-left: 2px;
+}
+QFrame#sectionSep {
+    background-color: #DCE3EE;
+    max-height: 1px;
+    min-height: 1px;
+    border: none;
+}
+
+/* --- Splitter giữa 3 khung Labels/Boxes/Images --- */
+QSplitter::handle {
+    background-color: #DCE3EE;
+    height: 4px;
+}
+QSplitter::handle:hover {
+    background-color: #A9C3EA;
+}
+
+/* --- Badge chế độ OK/NG ở status bar --- */
+QLabel#modeBadgeOK {
+    background-color: #E4F5EA;
+    border: 1px solid #7FCB9F;
+    color: #1F7A4C;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 12px;
+}
+QLabel#modeBadgeNG {
+    background-color: #FCE9E7;
+    border: 1px solid #E79892;
+    color: #B23A2F;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 12px;
+}
+QLabel#modeBadgeNone {
+    background-color: #EEF3FA;
+    border: 1px solid #DCE3EE;
+    color: #7C8AA8;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 12px;
+}
 """
 
 DARK_QSS = """
@@ -312,6 +417,111 @@ QMessageBox {
 
 QMessageBox QLabel {
     color: #E4E8F1;
+}
+
+/* --- Nút điều hướng/thiết lập (trung tính) --- */
+QPushButton#navBtn {
+    background: #242840;
+    border: 1px solid #3A4066;
+    color: #C9D1E5;
+}
+QPushButton#navBtn:hover {
+    background: #2A2F47;
+    border: 1px solid #4C557F;
+}
+QPushButton#navBtn:pressed {
+    background: #1E2233;
+}
+
+/* --- Nút Save: xanh lá --- */
+QPushButton#successBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #4CAF7D,
+        stop:1 #379968
+    );
+}
+QPushButton#successBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #5FC091,
+        stop:1 #4CAF7D
+    );
+}
+QPushButton#successBtn:pressed {
+    background: #2E8058;
+}
+
+/* --- Nút Delete: đỏ --- */
+QPushButton#dangerBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #E5766F,
+        stop:1 #D9564D
+    );
+}
+QPushButton#dangerBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #EE8B85,
+        stop:1 #E5766F
+    );
+}
+QPushButton#dangerBtn:pressed {
+    background: #C24940;
+}
+
+/* --- Tiêu đề nhóm nút bên trái + đường phân cách --- */
+QLabel#sectionTitle {
+    color: #7C86AD;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    padding-left: 2px;
+}
+QFrame#sectionSep {
+    background-color: #333A56;
+    max-height: 1px;
+    min-height: 1px;
+    border: none;
+}
+
+/* --- Splitter --- */
+QSplitter::handle {
+    background-color: #333A56;
+    height: 4px;
+}
+QSplitter::handle:hover {
+    background-color: #4C557F;
+}
+
+/* --- Badge chế độ OK/NG --- */
+QLabel#modeBadgeOK {
+    background-color: #1E3A2B;
+    border: 1px solid #3E7A57;
+    color: #7FDBA4;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 12px;
+}
+QLabel#modeBadgeNG {
+    background-color: #3A2220;
+    border: 1px solid #8A4A43;
+    color: #F0958D;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 12px;
+}
+QLabel#modeBadgeNone {
+    background-color: #242840;
+    border: 1px solid #3A4066;
+    color: #7C86AD;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 12px;
 }
 """
 

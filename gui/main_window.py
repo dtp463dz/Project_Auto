@@ -4,7 +4,7 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QLabel, QMainWindow, QMessageBox, 
     QVBoxLayout, QHBoxLayout, QFileDialog, QAction, QListWidget,
-    QListWidgetItem, QShortcut, QSizePolicy
+    QListWidgetItem, QShortcut, QSizePolicy, QSplitter, QFrame
 )
 from PyQt5.QtCore import Qt, QRect, QRectF, QSettings
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QColor
@@ -96,13 +96,22 @@ class MainWindow(QMainWindow):
         self.btn_ok = QPushButton("📂 OK Folder")
         self.btn_ng = QPushButton("📂 NG Folder")
         self.btn_labels = QPushButton("📂 Labels Folder")
-        self.btn_next = QPushButton("Next Image")
-        self.btn_prev = QPushButton("Previous Image")
-        self.btn_zoom_in = QPushButton("Zoom In")
-        self.btn_zoom_out = QPushButton("Zoom Out")
+        self.btn_next = QPushButton("▶ Next Image")
+        self.btn_prev = QPushButton("◀ Previous Image")
+        self.btn_zoom_in = QPushButton("🔍+ Zoom In")
+        self.btn_zoom_out = QPushButton("🔍− Zoom Out")
         self.btn_auto = QPushButton("⚙ Auto Labels")
         self.btn_save = QPushButton("💾 Save") 
         self.btn_delete_all = QPushButton("❌ Delete") 
+
+        # nút điều hướng/thiết lập dùng style trung tính (navBtn), không cạnh
+        # tranh sự chú ý với 2 hành động quan trọng nhất (Save / Auto Labels)
+        for btn in (self.btn_ok, self.btn_ng, self.btn_labels,
+                    self.btn_next, self.btn_prev,
+                    self.btn_zoom_in, self.btn_zoom_out):
+            btn.setObjectName("navBtn")
+        self.btn_save.setObjectName("successBtn")       # xanh lá - hành động an toàn
+        self.btn_delete_all.setObjectName("dangerBtn")  # đỏ - hành động phá huỷ
 
         self.btn_ok.clicked.connect(self.select_ok_folder)
         self.btn_ng.clicked.connect(self.select_ng_folder)
@@ -115,20 +124,54 @@ class MainWindow(QMainWindow):
         self.btn_save.clicked.connect(self.save_label)
         self.btn_delete_all.clicked.connect(self.delete_curent_image_label)
 
-        # control layout
+        def section_title(text):
+            lbl = QLabel(text)
+            lbl.setObjectName("sectionTitle")
+            return lbl
+
+        def section_sep():
+            line = QFrame()
+            line.setObjectName("sectionSep")
+            line.setFrameShape(QFrame.HLine)
+            return line
+
+        # control layout - neo trên cùng, phân nhóm rõ theo chức năng
         control_layout = QVBoxLayout()
-        control_layout.addStretch()
+        control_layout.setSpacing(6)
+
+        control_layout.addWidget(section_title("THƯ MỤC"))
         control_layout.addWidget(self.btn_ok)
         control_layout.addWidget(self.btn_ng)
         control_layout.addWidget(self.btn_labels)
-        control_layout.addWidget(self.btn_auto)
-        control_layout.addWidget(self.btn_next)
+
+        control_layout.addSpacing(4)
+        control_layout.addWidget(section_sep())
+        control_layout.addSpacing(4)
+
+        control_layout.addWidget(section_title("ĐIỀU HƯỚNG"))
         control_layout.addWidget(self.btn_prev)
+        control_layout.addWidget(self.btn_next)
+
+        control_layout.addSpacing(4)
+        control_layout.addWidget(section_sep())
+        control_layout.addSpacing(4)
+
+        control_layout.addWidget(section_title("ZOOM"))
         control_layout.addWidget(self.btn_zoom_in)
         control_layout.addWidget(self.btn_zoom_out)
+
+        control_layout.addSpacing(4)
+        control_layout.addWidget(section_sep())
+        control_layout.addSpacing(4)
+
+        control_layout.addWidget(section_title("XỬ LÝ"))
+        control_layout.addWidget(self.btn_auto)
         control_layout.addWidget(self.btn_save)
+
+        control_layout.addSpacing(14)   # tách xa Save - tránh bấm nhầm sang Delete
         control_layout.addWidget(self.btn_delete_all)
-        control_layout.addStretch()
+
+        control_layout.addStretch()   # đẩy toàn bộ nhóm lên trên, không canh giữa nữa
 
         # label list (danh sách toàn bộ class của project, có checkbox ẩn/hiện)
         self.label_list = QListWidget()
@@ -145,32 +188,51 @@ class MainWindow(QMainWindow):
         self.image_list.itemClicked.connect(self.on_image_selected)
         self.image_list.setMinimumWidth(180)
 
-        # label layout
+        # label panel
         label_header = QHBoxLayout()
         label_header.addWidget(QLabel("📌 Labels"))
         self.btn_toggle_all_labels = QPushButton("View")
+        self.btn_toggle_all_labels.setObjectName("navBtn")
         self.btn_toggle_all_labels.setFixedWidth(50)
         self.btn_toggle_all_labels.setToolTip("Ẩn/Hiện tất cả class")
         self.btn_toggle_all_labels.clicked.connect(self.toggle_all_labels_visibility)
         label_header.addStretch()
         label_header.addWidget(self.btn_toggle_all_labels)
 
-        label_layout = QVBoxLayout()
+        label_panel = QWidget()
+        label_layout = QVBoxLayout(label_panel)
+        label_layout.setContentsMargins(0, 0, 0, 0)
         label_layout.addLayout(label_header)
         label_layout.addWidget(self.label_list)
-        # box layout (bbox trong ảnh hiện tại)
-        box_layout = QVBoxLayout()
+
+        # box panel (bbox trong ảnh hiện tại)
+        box_panel = QWidget()
+        box_layout = QVBoxLayout(box_panel)
+        box_layout.setContentsMargins(0, 0, 0, 0)
         box_layout.addWidget(QLabel("🔲 Boxes trong ảnh"))
         box_layout.addWidget(self.box_list)
-        #image layout
-        image_layout = QVBoxLayout()
+
+        # image panel
+        image_panel = QWidget()
+        image_layout = QVBoxLayout(image_panel)
+        image_layout.setContentsMargins(0, 0, 0, 0)
         image_layout.addWidget(QLabel("Images"))
         image_layout.addWidget(self.image_list)
 
+        # splitter dọc - cho phép kéo giãn tỉ lệ giữa 3 khung theo nhu cầu,
+        # thay vì chia đều không gian bất kể nội dung
+        right_splitter = QSplitter(Qt.Vertical)
+        right_splitter.addWidget(label_panel)
+        right_splitter.addWidget(box_panel)
+        right_splitter.addWidget(image_panel)
+        right_splitter.setStretchFactor(0, 1)
+        right_splitter.setStretchFactor(1, 1)
+        right_splitter.setStretchFactor(2, 2)   # Images thường cần nhiều chỗ nhất
+        right_splitter.setChildrenCollapsible(False)
+
         right_panel = QVBoxLayout()
-        right_panel.addLayout(label_layout)
-        right_panel.addLayout(box_layout)
-        right_panel.addLayout(image_layout)
+        right_panel.setContentsMargins(0, 0, 0, 0)
+        right_panel.addWidget(right_splitter)
         right_panel_widget = QWidget()
         right_panel_widget.setObjectName("rightPanel")
         right_panel_widget.setLayout(right_panel)
@@ -288,15 +350,7 @@ class MainWindow(QMainWindow):
         self.refresh_image_list()
         self.current_mode = "OK"
         self.model_label.setText("MODE: OK")
-        self.model_label.setStyleSheet("""
-            QLabel {
-                background-color: #E8F5E9;
-                border: 1px solid #81C784;
-                color: #2E7D32;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
+        self._set_mode_badge_style("modeBadgeOK")
         self.update_image()
 
     def load_ng_folder(self, folder):
@@ -309,16 +363,15 @@ class MainWindow(QMainWindow):
         self.refresh_image_list()
         self.current_mode = "NG"
         self.model_label.setText("MODE: NG")
-        self.model_label.setStyleSheet("""
-            QLabel {
-                background-color: #FDECEA;
-                border: 1px solid #EF9A9A;
-                color: #B71C1C;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
+        self._set_mode_badge_style("modeBadgeNG")
         self.update_image()
+
+    def _set_mode_badge_style(self, object_name):
+        """Đổi class QSS của badge OK/NG - dùng theme.py thay vì màu hardcode,
+        nên tự đổi đúng tông khi chuyển Light/Dark."""
+        self.model_label.setObjectName(object_name)
+        self.model_label.style().unpolish(self.model_label)
+        self.model_label.style().polish(self.model_label)
 
     def update_image(self):
         if not self.current_images:
@@ -328,7 +381,7 @@ class MainWindow(QMainWindow):
         self.load_label_file(image_path)
         self.dirty = False
         self.update_window_title()
-        self.image_info.setText(f"{self.current_index + 1} / {len(self.current_images)}")
+        self.image_info.setText(f"🖼  {self.current_index + 1} / {len(self.current_images)}")
         self.image_list.blockSignals(True)
         self.image_list.setCurrentRow(self.current_index)
         self.image_list.blockSignals(False)
@@ -374,20 +427,11 @@ class MainWindow(QMainWindow):
 
     def create_status_bar(self): 
         self.model_label = QLabel("MODE: NONE")
-        self.model_label.setFixedHeight(36)
+        self.model_label.setObjectName("modeBadgeNone")
+        self.model_label.setFixedHeight(30)
         self.model_label.setAlignment(Qt.AlignCenter)
-        self.model_label.setStyleSheet("""
-            QLabel {
-                background-color: #E3F2FD;
-                border: 1px solid #90CAF9;
-                border-radius: 6px;
-                font-size: 16px;
-                font-weight: bold;
-                color: #1565C0;
-            }
-        """)
 
-        self.image_info = QLabel("0 / 0")
+        self.image_info = QLabel("🖼  0 / 0")
         self.image_info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
     def next_image(self):
@@ -679,7 +723,7 @@ class MainWindow(QMainWindow):
                 self.current_index = -1
                 self.dirty = False
                 self.update_window_title()
-                self.image_info.setText("No image")
+                self.image_info.setText("🖼  No image")
                 return
             if self.current_index >= len(self.current_images):
                 self.current_index = len(self.current_images) - 1
@@ -730,6 +774,7 @@ class MainWindow(QMainWindow):
     # edit label
     # ---------- helper dùng chung cho rename/delete label (gọi từ cả
     # on_edit_label lẫn on_box_created, vì cả 2 đều mở SelectLabelDialog) ----------
+
     def _cascade_delete_label_from_files(self, del_index, skip_image_path=None):
         """Xóa/dồn id label trong TẤT CẢ file .txt trong labels_dir (trừ classes.txt
         và ảnh đang mở - ảnh đang mở xử lý qua bộ nhớ + Save như bình thường)."""
