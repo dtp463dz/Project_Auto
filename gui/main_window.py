@@ -20,6 +20,7 @@ from dialog.dialog_lib import DialogLib
 from dialog.select_label_dialog import SelectLabelDialog
 from dialog.new_label_dialog import NewLabelDialog
 from dialog.loading_dialog import LoadingDialog
+from dialog.photoshop_dialog import PhotoshopDialog
 from logic.auto_label_worker import AutoLabelWorker
 from logic.auto_label_logic import AutoLabelLogic
 log = setup_logger()
@@ -103,12 +104,13 @@ class MainWindow(QMainWindow):
         self.btn_auto = QPushButton("⚙ Auto Labels")
         self.btn_save = QPushButton("💾 Save") 
         self.btn_delete_all = QPushButton("❌ Delete") 
+        self.btn_photoshop = QPushButton("🧩 Photoshop")
 
         # nút điều hướng/thiết lập dùng style trung tính (navBtn), không cạnh
         # tranh sự chú ý với 2 hành động quan trọng nhất (Save / Auto Labels)
         for btn in (self.btn_ok, self.btn_ng, self.btn_labels,
                     self.btn_next, self.btn_prev,
-                    self.btn_zoom_in, self.btn_zoom_out):
+                    self.btn_zoom_in, self.btn_zoom_out, self.btn_photoshop):
             btn.setObjectName("navBtn")
         self.btn_save.setObjectName("successBtn")       # xanh lá - hành động an toàn
         self.btn_delete_all.setObjectName("dangerBtn")  # đỏ - hành động phá huỷ
@@ -123,6 +125,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_out.clicked.connect(self.canvas.zoom_out)
         self.btn_save.clicked.connect(self.save_label)
         self.btn_delete_all.clicked.connect(self.delete_curent_image_label)
+        self.btn_photoshop.clicked.connect(self.open_photoshop_dialog)
 
         def section_title(text):
             lbl = QLabel(text)
@@ -166,6 +169,7 @@ class MainWindow(QMainWindow):
 
         control_layout.addWidget(section_title("XỬ LÝ"))
         control_layout.addWidget(self.btn_auto)
+        control_layout.addWidget(self.btn_photoshop)
         control_layout.addWidget(self.btn_save)
 
         control_layout.addSpacing(14)   # tách xa Save - tránh bấm nhầm sang Delete
@@ -1032,6 +1036,10 @@ class MainWindow(QMainWindow):
         self.worker.finished_signal.connect(self.on_auto_label_done)
         self.worker.error_signal.connect(self.on_auto_label_error)
         self.worker.start()
+
+    def open_photoshop_dialog(self):
+        dialog = PhotoshopDialog(self)
+        dialog.exec_()
 
     def _on_auto_label_cancel_requested(self):
         self._auto_label_cancelled = True
