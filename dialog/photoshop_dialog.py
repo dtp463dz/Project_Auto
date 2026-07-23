@@ -20,79 +20,179 @@ def cv2_to_qpixmap(bgr):
 
 
 class _BaseImageCanvas(QWidget):
-    """Canvas dùng chung: hiển thị 1 ảnh fit-to-window, quy đổi toạ độ
-    canvas <-> ảnh gốc. Không zoom/pan - giữ đơn giản cho dialog phụ trợ này."""
+    """Canvas dùng chung: hiển thị 1 ảnh có ZOOM + PAN (giống Photoshop/Paint).
+
+    - Ctrl + cuộn chuột: zoom quanh vị trí con trỏ (không lệch tâm qua nhiều lần zoom)
+    - Kéo chuột giữa (middle button): pan
+    - zoom_to_fit(): đưa về vừa khung nhìn
+    100% = 1 pixel ảnh = 1 pixel màn hình (đúng chuẩn Paint), không phải 100% = fit.
+    """
+
+    zoom_changed = pyqtSignal(int)   # % zoom hiện tại
+
+    MIN_SCALE = 0.05
+    MAX_SCALE = 20.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.image_bgr = None      # numpy BGR - ảnh gốc full-res
+        self.image_bgr = None
         self.pixmap = None
-        self.fit_scale = 1.0
+        self.scale = 1.0
         self.offset = QPointF(0, 0)
+        self._panning = False
+        self._pan_start = None
         self.setMinimumSize(360, 360)
+        self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.StrongFocus)
 
+    # ---------- load ----------
     def load_image(self, path):
         img = cv2.imread(path)
         if img is None:
             return False
         self.image_bgr = img
         self.pixmap = cv2_to_qpixmap(img)
-        self._recompute_fit()
-        self.update()
+        self.zoom_to_fit()
         return True
 
     def set_image_bgr(self, img_bgr):
         self.image_bgr = img_bgr
         self.pixmap = cv2_to_qpixmap(img_bgr)
-        self._recompute_fit()
-        self.update()
+        self.zoom_to_fit()
 
-    def _recompute_fit(self):
-        if not self.pixmap:
-            return
-        pw, ph = self.pixmap.width(), self.pixmap.height()
-        cw, ch = max(1, self.width()), max(1, self.height())
-        self.fit_scale = min(cw / pw, ch / ph)
-        draw_w = pw * self.fit_scale
-        draw_h = ph * self.fit_scale
-        self.offset = QPointF((cw - draw_w) / 2, (ch - draw_h) / 2)
-
-    def resizeEvent(self, event):
-        self._recompute_fit()
-        super().resizeEvent(event)
-
-    def to_canvas(self, pt_img: QPointF) -> QPointF:
+    # ---------- toạ độ ----------
+    def to_canvas(self, pt_img) -> QPointF:
         return QPointF(
-            pt_img.x() * self.fit_scale + self.offset.x(),
-            pt_img.y() * self.fit_scale + self.offset.y()
+            pt_img.x() * self.scale + self.offset.x(),
+            pt_img.y() * self.scale + self.offset.y()
         )
 
     def to_image(self, pt_canvas) -> QPointF:
         return QPointF(
-            (pt_canvas.x() - self.offset.x()) / self.fit_scale,
-            (pt_canvas.y() - self.offset.y()) / self.fit_scale
+            (pt_canvas.x() - self.offset.x()) / self.scale,
+            (pt_canvas.y() - self.offset.y()) / self.scale
         )
 
     def rect_to_canvas(self, rect_img: QRectF) -> QRectF:
         tl = self.to_canvas(rect_img.topLeft())
         return QRectF(tl.x(), tl.y(),
-                       rect_img.width() * self.fit_scale,
-                       rect_img.height() * self.fit_scale)
+                       rect_img.width() * self.scale,
+                       rect_img.height() * self.scale)
+
+    # ---------- zoom ----------
+    def _fit_scale_value(self):
+        if not self.pixmap:
+            return 1.0
+        pw, ph = self.pixmap.width(), self.pixmap.height()
+        cw, ch = max(1, self.width()), max(1, self.height())
+        return min(cw / pw, ch / ph)
+
+    def zoom_to_fit(self):
+        if not self.pixmap:
+            return
+        self.scale = self._fit_scale_value()
+        pw, ph = self.pixmap.width(), self.pixmap.height()
+        cw, ch = max(1, self.width()), max(1, self.height())
+        draw_w, draw_h = pw * self.scale, ph * self.scale
+        self.offset = QPointF((cw - draw_w) / 2, (ch - draw_h) / 2)
+        self.update()
+        self._emit_zoom()
+
+    def _emit_zoom(self):
+        self.zoom_changed.emit(int(round(self.scale * 100)))
+
+    def zoom_in(self):
+        self._zoom_around_center(1.25)
+
+    def zoom_out(self):
+        self._zoom_around_center(1 / 1.25)
+
+    def _zoom_around_center(self, factor):
+        if not self.pixmap:
+            return
+        center = QPointF(self.width() / 2, self.height() / 2)
+        anchor_img = self.to_image(center)
+        new_scale = max(self.MIN_SCALE, min(self.scale * factor, self.MAX_SCALE))
+        if abs(new_scale - self.scale) < 1e-9:
+            return
+        self.scale = new_scale
+        self.offset = QPointF(
+            center.x() - anchor_img.x() * self.scale,
+            center.y() - anchor_img.y() * self.scale
+        )
+        self.update()
+        self._emit_zoom()
+
+    def wheelEvent(self, event):
+        if not self.pixmap or not (event.modifiers() & Qt.ControlModifier):
+            event.ignore()
+            return
+        mouse_pos = QPointF(event.pos())
+        old_pos = self.to_image(mouse_pos)
+        factor = 1.25 if event.angleDelta().y() > 0 else 1 / 1.25
+        new_scale = max(self.MIN_SCALE, min(self.scale * factor, self.MAX_SCALE))
+        if abs(new_scale - self.scale) > 1e-9:
+            self.scale = new_scale
+            self.offset = QPointF(
+                mouse_pos.x() - old_pos.x() * self.scale,
+                mouse_pos.y() - old_pos.y() * self.scale
+            )
+            self.update()
+            self._emit_zoom()
+        event.accept()
+
+    # ---------- pan (middle-mouse-drag) - subclass gọi các hàm này TRƯỚC ----------
+    def _try_start_pan(self, event):
+        if event.button() == Qt.MiddleButton:
+            self._panning = True
+            self._pan_start = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)
+            return True
+        return False
+
+    def _try_pan_move(self, event):
+        if self._panning:
+            delta = event.pos() - self._pan_start
+            self.offset += QPointF(delta)
+            self._pan_start = event.pos()
+            self.update()
+            return True
+        return False
+
+    def _try_end_pan(self, event):
+        if self._panning and event.button() == Qt.MiddleButton:
+            self._panning = False
+            self.setCursor(Qt.ArrowCursor)
+            return True
+        return False
+
+    def _draw_background(self, painter):
+        painter.fillRect(self.rect(), QColor(30, 30, 30))
+        if self.pixmap:
+            painter.drawPixmap(
+                self.rect_to_canvas(QRectF(0, 0, self.pixmap.width(), self.pixmap.height())),
+                self.pixmap, QRectF(self.pixmap.rect())
+            )
 
 
 class SourceCanvas(_BaseImageCanvas):
     """Ảnh nguồn - chọn vùng cắt theo bbox có sẵn (mode='bbox') hoặc tự vẽ
-    hình chữ nhật (mode='manual')."""
+    hình chữ nhật kiểu Paint: vẽ thô rồi kéo góc để resize, kéo giữa để
+    di chuyển (mode='manual')."""
 
     selection_changed = pyqtSignal()
+    HANDLE_SIZE = 9
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.mode = "bbox"       # "bbox" hoặc "manual"
-        self.boxes = []          # [{"rect": QRectF, "label_name": str}]
+        self.mode = "bbox"
+        self.boxes = []
         self.selected_idx = None
         self.manual_rect = None
         self._drag_start = None
+        self.resize_handle = None
+        self.moving = False
+        self._move_offset = QPointF()
 
     def set_mode(self, mode):
         self.mode = mode
@@ -102,8 +202,6 @@ class SourceCanvas(_BaseImageCanvas):
         self.selection_changed.emit()
 
     def load_boxes_from_txt(self, txt_path, project_labels):
-        """Đọc file .txt YOLO của ảnh nguồn (nếu có), map id -> tên qua
-        project_labels để hiện tên thay vì số."""
         self.boxes = []
         if not os.path.exists(txt_path) or self.image_bgr is None:
             self.update()
@@ -125,7 +223,6 @@ class SourceCanvas(_BaseImageCanvas):
         self.update()
 
     def get_cut(self):
-        """Trả về (rect: QRect toạ độ ảnh int, label_name hoặc None)."""
         if self.mode == "bbox":
             if self.selected_idx is None:
                 return None, None
@@ -133,13 +230,27 @@ class SourceCanvas(_BaseImageCanvas):
             r = b["rect"]
             return QRect(int(r.x()), int(r.y()), int(r.width()), int(r.height())), b["label_name"]
         else:
-            if self.manual_rect is None or self.manual_rect.width() < 4 or self.manual_rect.height() < 4:
+            if self.manual_rect is None or self.manual_rect.normalized().width() < 4 \
+                    or self.manual_rect.normalized().height() < 4:
                 return None, None
             r = self.manual_rect.normalized()
             return QRect(int(r.x()), int(r.y()), int(r.width()), int(r.height())), None
 
+    def _detect_handle(self, pos_canvas, rect_canvas):
+        pts = {
+            'tl': rect_canvas.topLeft(), 'tr': rect_canvas.topRight(),
+            'bl': rect_canvas.bottomLeft(), 'br': rect_canvas.bottomRight(),
+        }
+        tol = self.HANDLE_SIZE * 1.4
+        for name, pt in pts.items():
+            if (pos_canvas - pt).manhattanLength() <= tol:
+                return name
+        return None
+
     # ---- mouse ----
     def mousePressEvent(self, event):
+        if self._try_start_pan(event):
+            return
         if self.pixmap is None or event.button() != Qt.LeftButton:
             return
         if self.mode == "bbox":
@@ -150,33 +261,82 @@ class SourceCanvas(_BaseImageCanvas):
                     self.update()
                     self.selection_changed.emit()
                     return
-        else:
-            self._drag_start = self.to_image(event.pos())
-            self.manual_rect = QRectF(self._drag_start, self._drag_start)
-            self.update()
+            return
+
+        # ---- manual: ưu tiên handle -> di chuyển -> vẽ mới ----
+        pos_canvas = QPointF(event.pos())
+        if self.manual_rect is not None:
+            rect_canvas = self.rect_to_canvas(self.manual_rect.normalized())
+            handle = self._detect_handle(pos_canvas, rect_canvas)
+            if handle:
+                self.resize_handle = handle
+                return
+            if rect_canvas.contains(pos_canvas):
+                self.moving = True
+                self._move_offset = self.to_image(pos_canvas) - self.manual_rect.normalized().topLeft()
+                return
+
+        self._drag_start = self.to_image(pos_canvas)
+        self.manual_rect = QRectF(self._drag_start, self._drag_start)
+        self.update()
 
     def mouseMoveEvent(self, event):
-        if self.mode == "manual" and self._drag_start is not None:
-            cur = self.to_image(event.pos())
-            self.manual_rect = QRectF(self._drag_start, cur)
+        if self._try_pan_move(event):
+            return
+        if self.mode != "manual":
+            return
+
+        pos_canvas = QPointF(event.pos())
+
+        # hover cursor cho handle (chỉ khi không đang thao tác gì)
+        if not self.resize_handle and not self.moving and self._drag_start is None and self.manual_rect is not None:
+            rect_canvas = self.rect_to_canvas(self.manual_rect.normalized())
+            handle = self._detect_handle(pos_canvas, rect_canvas)
+            cursor_map = {'tl': Qt.SizeFDiagCursor, 'br': Qt.SizeFDiagCursor,
+                          'tr': Qt.SizeBDiagCursor, 'bl': Qt.SizeBDiagCursor}
+            if handle:
+                self.setCursor(cursor_map[handle])
+            elif rect_canvas.contains(pos_canvas):
+                self.setCursor(Qt.SizeAllCursor)
+            else:
+                self.setCursor(Qt.CrossCursor)
+
+        pos_img = self.to_image(event.pos())
+        if self.resize_handle:
+            r = self.manual_rect.normalized()
+            left, top, right, bottom = r.left(), r.top(), r.right(), r.bottom()
+            if 'l' in self.resize_handle:
+                left = pos_img.x()
+            if 'r' in self.resize_handle:
+                right = pos_img.x()
+            if 't' in self.resize_handle:
+                top = pos_img.y()
+            if 'b' in self.resize_handle:
+                bottom = pos_img.y()
+            self.manual_rect = QRectF(QPointF(left, top), QPointF(right, bottom))
+            self.update()
+        elif self.moving:
+            new_tl = pos_img - self._move_offset
+            r = self.manual_rect.normalized()
+            self.manual_rect = QRectF(new_tl, QPointF(new_tl.x() + r.width(), new_tl.y() + r.height()))
+            self.update()
+        elif self._drag_start is not None:
+            self.manual_rect = QRectF(self._drag_start, pos_img)
             self.update()
 
     def mouseReleaseEvent(self, event):
-        if self.mode == "manual" and self._drag_start is not None:
-            self._drag_start = None
-            self.selection_changed.emit()
+        if self._try_end_pan(event):
+            return
+        if self.mode == "manual":
+            if self.resize_handle or self.moving or self._drag_start is not None:
+                self.resize_handle = None
+                self.moving = False
+                self._drag_start = None
+                self.selection_changed.emit()
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(30, 30, 30))
-        if self.pixmap:
-            painter.drawPixmap(
-                QRectF(self.offset, QPointF(
-                    self.offset.x() + self.pixmap.width() * self.fit_scale,
-                    self.offset.y() + self.pixmap.height() * self.fit_scale
-                )),
-                self.pixmap, QRectF(self.pixmap.rect())
-            )
+        self._draw_background(painter)
         if self.mode == "bbox":
             for idx, b in enumerate(self.boxes):
                 rc = self.rect_to_canvas(b["rect"])
@@ -192,6 +352,12 @@ class SourceCanvas(_BaseImageCanvas):
                 painter.setPen(QPen(QColor(255, 200, 40), 2, Qt.DashLine))
                 painter.setBrush(QColor(255, 200, 40, 60))
                 painter.drawRect(rc)
+                # handle kiểu Paint - 4 ô vuông nhỏ ở góc
+                s = self.HANDLE_SIZE
+                painter.setPen(QPen(QColor(60, 60, 60), 1))
+                painter.setBrush(QColor(255, 255, 255))
+                for pt in (rc.topLeft(), rc.topRight(), rc.bottomLeft(), rc.bottomRight()):
+                    painter.drawRect(QRectF(pt.x() - s / 2, pt.y() - s / 2, s, s))
 
 
 class TargetCanvas(_BaseImageCanvas):
@@ -201,7 +367,7 @@ class TargetCanvas(_BaseImageCanvas):
         super().__init__(parent)
         self.patch_bgr = None
         self.patch_scale = 1.0
-        self.patch_pos_img = QPointF(0, 0)   # góc trên-trái, toạ độ ảnh đích
+        self.patch_pos_img = QPointF(0, 0)
         self._dragging = False
         self._drag_offset = QPointF(0, 0)
 
@@ -225,7 +391,6 @@ class TargetCanvas(_BaseImageCanvas):
         return int(w * self.patch_scale), int(h * self.patch_scale)
 
     def get_paste_rect(self):
-        """Rect dán (x, y, w, h) toạ độ ảnh đích - chưa clip."""
         w, h = self._patch_size()
         return int(self.patch_pos_img.x()), int(self.patch_pos_img.y()), w, h
 
@@ -234,6 +399,8 @@ class TargetCanvas(_BaseImageCanvas):
         self.update()
 
     def mousePressEvent(self, event):
+        if self._try_start_pan(event):
+            return
         if self.patch_bgr is None or event.button() != Qt.LeftButton:
             return
         pos_img = self.to_image(event.pos())
@@ -245,27 +412,23 @@ class TargetCanvas(_BaseImageCanvas):
             self.setCursor(Qt.ClosedHandCursor)
 
     def mouseMoveEvent(self, event):
+        if self._try_pan_move(event):
+            return
         if self._dragging:
             pos_img = self.to_image(event.pos())
             self.patch_pos_img = pos_img - self._drag_offset
             self.update()
 
     def mouseReleaseEvent(self, event):
+        if self._try_end_pan(event):
+            return
         if self._dragging:
             self._dragging = False
             self.setCursor(Qt.ArrowCursor)
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(30, 30, 30))
-        if self.pixmap:
-            painter.drawPixmap(
-                QRectF(self.offset, QPointF(
-                    self.offset.x() + self.pixmap.width() * self.fit_scale,
-                    self.offset.y() + self.pixmap.height() * self.fit_scale
-                )),
-                self.pixmap, QRectF(self.pixmap.rect())
-            )
+        self._draw_background(painter)
         if self.patch_bgr is not None:
             w, h = self._patch_size()
             if w > 0 and h > 0:
@@ -280,16 +443,50 @@ class TargetCanvas(_BaseImageCanvas):
                 painter.drawRect(rc)
 
 
+def _make_zoom_row(canvas):
+    """Tạo hàng điều khiển zoom kiểu Paint: － [ 100% ] ＋ [Fit]"""
+    row = QHBoxLayout()
+    btn_out = QPushButton("－")
+    btn_out.setObjectName("navBtn")
+    btn_out.setFixedWidth(32)
+    zoom_label = QLabel("100%")
+    zoom_label.setFixedWidth(48)
+    zoom_label.setAlignment(Qt.AlignCenter)
+    btn_in = QPushButton("＋")
+    btn_in.setObjectName("navBtn")
+    btn_in.setFixedWidth(32)
+    btn_fit = QPushButton("Fit")
+    btn_fit.setObjectName("navBtn")
+    btn_fit.setFixedWidth(40)
+
+    btn_out.clicked.connect(canvas.zoom_out)
+    btn_in.clicked.connect(canvas.zoom_in)
+    btn_fit.clicked.connect(canvas.zoom_to_fit)
+    canvas.zoom_changed.connect(lambda p: zoom_label.setText(f"{p}%"))
+
+    row.addWidget(QLabel("🔍"))
+    row.addWidget(btn_out)
+    row.addWidget(zoom_label)
+    row.addWidget(btn_in)
+    row.addWidget(btn_fit)
+    row.addStretch()
+    hint = QLabel("Ctrl+cuộn: zoom · Chuột giữa: pan")
+    hint.setObjectName("subtitle")
+    row.addWidget(hint)
+    return row
+
+
 class PhotoshopDialog(QDialog):
-    """Cửa sổ ghép ảnh: cắt vật thể từ ảnh nguồn (theo bbox có sẵn hoặc tự vẽ),
-    dán vào ảnh đích với biên mờ nhẹ (feathering), lưu thành ảnh mới + tự
-    sinh label cho vật vừa dán."""
+    """Cửa sổ ghép ảnh: cắt vật thể từ ảnh nguồn (theo bbox có sẵn hoặc tự vẽ
+    kiểu Paint - kéo góc resize, kéo giữa di chuyển), dán vào ảnh đích với
+    biên mờ nhẹ (feathering), lưu thành ảnh mới + tự sinh label cho vật vừa dán.
+    Cả 2 khung ảnh đều zoom/pan được (Ctrl+cuộn chuột, chuột giữa để pan)."""
 
     def __init__(self, main_window):
         super().__init__(main_window)
         self.main_window = main_window
         self.setWindowTitle("🧩 Photoshop - Ghép ảnh tạo data")
-        self.resize(1150, 680)
+        self.resize(1200, 720)
 
         self.source_path = None
         self.target_path = None
@@ -313,7 +510,7 @@ class PhotoshopDialog(QDialog):
 
         mode_row = QHBoxLayout()
         self.radio_bbox = QRadioButton("🔲 Chọn theo bbox có sẵn")
-        self.radio_manual = QRadioButton("✏️ Tự vẽ vùng cắt")
+        self.radio_manual = QRadioButton("✏️ Tự vẽ vùng cắt (như Paint)")
         self.radio_bbox.setChecked(True)
         mode_group = QButtonGroup(self)
         mode_group.addButton(self.radio_bbox)
@@ -325,6 +522,7 @@ class PhotoshopDialog(QDialog):
 
         self.source_canvas = SourceCanvas()
         src_col.addWidget(self.source_canvas, 1)
+        src_col.addLayout(_make_zoom_row(self.source_canvas))
 
         self.btn_cut = QPushButton("✂️  Cắt vùng đã chọn →")
         self.btn_cut.setObjectName("successBtn")
@@ -353,6 +551,7 @@ class PhotoshopDialog(QDialog):
 
         self.target_canvas = TargetCanvas()
         tgt_col.addWidget(self.target_canvas, 1)
+        tgt_col.addLayout(_make_zoom_row(self.target_canvas))
 
         feather_row = QHBoxLayout()
         feather_row.addWidget(QLabel("Độ mờ viền (feather):"))
@@ -401,10 +600,7 @@ class PhotoshopDialog(QDialog):
 
     # ---------- style ----------
     def _apply_local_style(self):
-        if self._dark:
-            subtitle = "#9AA3C7"
-        else:
-            subtitle = "#6B7690"
+        subtitle = "#9AA3C7" if self._dark else "#6B7690"
         self.setStyleSheet(f"QLabel#subtitle {{ color: {subtitle}; font-size: 11px; }}")
 
     # ---------- nguồn ----------
@@ -473,7 +669,6 @@ class PhotoshopDialog(QDialog):
                               (rect.x(), rect.y(), rect.width(), rect.height()))
 
         if label_name is None:
-            # mode tự vẽ - chưa có tên class, hỏi người dùng
             existing = list(self.main_window.labels)
             name, ok = QInputDialog.getItem(
                 self, "Tên class", "Vật thể vừa cắt thuộc class nào?",
@@ -530,7 +725,6 @@ class PhotoshopDialog(QDialog):
                                  "Vùng dán nằm ngoài ảnh đích, hãy kéo lại vào trong ảnh.")
             return
 
-        # tên file mới, tránh đè
         target_dir = os.path.dirname(self.target_path)
         base_name = os.path.splitext(os.path.basename(self.target_path))[0]
         ext = os.path.splitext(self.target_path)[1] or ".jpg"
@@ -546,7 +740,6 @@ class PhotoshopDialog(QDialog):
             QMessageBox.critical(self, "Lỗi", f"Không lưu được ảnh:\n{new_path}")
             return
 
-        # đồng bộ label id với project hiện tại (main_window.labels)
         if self.cut_label_name not in mw.labels:
             mw.labels.append(self.cut_label_name)
             mw.refresh_label_list()
@@ -563,8 +756,6 @@ class PhotoshopDialog(QDialog):
         with open(label_path, "w", encoding="utf-8") as f:
             f.write(f"{label_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}\n")
 
-        # nếu ảnh đích đang nằm trong danh sách ảnh đang mở của TPLabel,
-        # thêm luôn ảnh mới vào danh sách để thấy ngay
         if mw.current_images and target_dir == os.path.dirname(mw.current_images[0]):
             mw.current_images.append(new_path)
             mw.refresh_image_list()
