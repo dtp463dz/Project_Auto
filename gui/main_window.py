@@ -565,7 +565,7 @@ class MainWindow(QMainWindow):
         self.box_list.blockSignals(False)
 
     def on_box_created(self, rect:QRectF):
-        dialog = SelectLabelDialog(self.labels, current=self.last_label_id)
+        dialog = SelectLabelDialog(self.labels, current=self.last_label_id, parent=self)
         if not dialog.exec_():
             return
         action, result = dialog.get_result()
@@ -899,7 +899,8 @@ class MainWindow(QMainWindow):
         item = self.canvas.boxes[box_index]
         dialog = SelectLabelDialog(
             self.labels,
-            current = item["label"]
+            current = item["label"],
+            parent = self
         )
         if not dialog.exec_():
             return
