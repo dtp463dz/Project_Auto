@@ -23,6 +23,7 @@ from dialog.loading_dialog import LoadingDialog
 from dialog.photoshop_dialog import PhotoshopDialog
 from logic.auto_label_worker import AutoLabelWorker
 from logic.auto_label_logic import AutoLabelLogic
+from logic.auto_label_logic_v5 import AutoLabelLogicV5
 log = setup_logger()
 
 class MainWindow(QMainWindow):
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
         self.help_lib = HelpLib(self)
         self.canvas = ImageCanvas()
         self.logic = AutoLabelLogic()
+        self.logic_v5 = AutoLabelLogicV5()
 
         self.labels = []
         self.label_to_id = {}
@@ -102,6 +104,7 @@ class MainWindow(QMainWindow):
         self.btn_zoom_in = QPushButton("🔍+ Zoom In")
         self.btn_zoom_out = QPushButton("🔍− Zoom Out")
         self.btn_auto = QPushButton("⚙ Auto Labels")
+        self.btn_auto_v5 = QPushButton("⚙ Auto Labels (v5)")
         self.btn_save = QPushButton("💾 Save") 
         self.btn_delete_all = QPushButton("❌ Delete") 
         self.btn_photoshop = QPushButton("🧩 Photoshop")
@@ -110,7 +113,8 @@ class MainWindow(QMainWindow):
         # tranh sự chú ý với 2 hành động quan trọng nhất (Save / Auto Labels)
         for btn in (self.btn_ok, self.btn_ng, self.btn_labels,
                     self.btn_next, self.btn_prev,
-                    self.btn_zoom_in, self.btn_zoom_out, self.btn_photoshop):
+                    self.btn_zoom_in, self.btn_zoom_out, self.btn_photoshop,
+                    self.btn_auto_v5):
             btn.setObjectName("navBtn")
         self.btn_save.setObjectName("successBtn")       # xanh lá - hành động an toàn
         self.btn_delete_all.setObjectName("dangerBtn")  # đỏ - hành động phá huỷ
@@ -119,6 +123,7 @@ class MainWindow(QMainWindow):
         self.btn_ng.clicked.connect(self.select_ng_folder)
         self.btn_labels.clicked.connect(self.select_labels_folder)
         self.btn_auto.clicked.connect(self.auto_label)
+        self.btn_auto_v5.clicked.connect(self.auto_label_v5)
         self.btn_next.clicked.connect(self.next_image)
         self.btn_prev.clicked.connect(self.prev_image)
         self.btn_zoom_in.clicked.connect(self.canvas.zoom_in)
@@ -169,6 +174,7 @@ class MainWindow(QMainWindow):
 
         control_layout.addWidget(section_title("XỬ LÝ"))
         control_layout.addWidget(self.btn_auto)
+        control_layout.addWidget(self.btn_auto_v5)
         control_layout.addWidget(self.btn_photoshop)
         control_layout.addWidget(self.btn_save)
 
@@ -997,6 +1003,21 @@ class MainWindow(QMainWindow):
         self.canvas.update()
 
     def auto_label(self):
+        self._run_auto_label(self.logic)
+
+    def auto_label_v5(self):
+        try:
+            import yolov5  # noqa: F401 - chỉ để kiểm tra đã cài package chưa
+        except ImportError:
+            QMessageBox.warning(
+                self, "Thiếu thư viện",
+                "Chưa cài package 'yolov5' để chạy model YOLOv5 gốc.\n\n"
+                "Cài bằng lệnh:\n    pip install yolov5"
+            )
+            return
+        self._run_auto_label(self.logic_v5)
+
+    def _run_auto_label(self, logic_obj):
         image_dir = DialogLib.select_image_folder(self)
         if not image_dir:
             return
@@ -1021,7 +1042,7 @@ class MainWindow(QMainWindow):
 
         #start worker
         self.worker = AutoLabelWorker(
-            self.logic,
+            logic_obj,
             image_dir, 
             model_path,
             label_dir,
