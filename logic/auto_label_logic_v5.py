@@ -1,28 +1,30 @@
-"""
-auto_label_logic_v5.py - Auto-label dành riêng cho model YOLOv5 GỐC
-(train bằng repo https://github.com/ultralytics/yolov5).
-
-LÝ DO CẦN FILE RIÊNG:
-Theo tài liệu chính thức Ultralytics: "Models trained with the
-ultralytics/yolov5 repo cannot be loaded with the ultralytics/ultralytics
-library." Tức là `from ultralytics import YOLO; YOLO(model_path)` (đang dùng
-trong auto_label_logic.py cho v8/v9/v10/v11) sẽ KHÔNG load được checkpoint
-v5 gốc (kiến trúc pickle khác nhau) - phải dùng package `yolov5` riêng
-(pip install yolov5) mới load đúng.
-
-Có cùng chữ ký run(...) như AutoLabelLogic (v8/v11) nên AutoLabelWorker
-dùng chung được, không cần sửa gì ở worker.
-"""
-
 import os
 import pathlib
 from PIL import Image
-
 
 class AutoLabelLogicV5:
     def __init__(self):
         self.model = None
         self.model_path = None
+
+    @staticmethod
+    def _patch_yolov5_file_stat_calls():
+        """Thay date_modified()/file_date() bằng bản không đụng tới Path(...).stat()
+        - chỉ ảnh hưởng dòng banner khởi động in ra console, không ảnh hưởng kết
+        quả detect. An toàn khi gọi nhiều lần / cả lúc chạy từ source lẫn .exe."""
+        try:
+            import yolov5.utils.torch_utils as tu
+            tu.date_modified = lambda path='': ''
+        except Exception:
+            pass
+        try:
+            import yolov5.utils.general as gu
+            if hasattr(gu, "file_date"):
+                gu.file_date = lambda path='': ''
+            if hasattr(gu, "date_modified"):
+                gu.date_modified = lambda path='': ''
+        except Exception:
+            pass
 
     def load_model(self, model_path):
         if not model_path:
@@ -31,6 +33,13 @@ class AutoLabelLogicV5:
             return   # đã load đúng model này rồi, không load lại
 
         import yolov5   # import trễ - chỉ những ai thực sự dùng nút v5 mới cần cài package này
+
+        # --- vô hiệu hoá 2 hàm hay gây crash khi chạy dưới dạng .exe đóng gói ---
+        # torch_utils.date_modified()/general.file_date() gọi Path(__file__).stat()
+        # để in banner "YOLOv5 ... torch-x.x" - khi PyInstaller nén module vào PYZ,
+        # __file__ trỏ tới đường dẫn .pyc ảo không tồn tại trên đĩa -> WinError 2/3.
+        # Đây là lỗi đã biết của yolov5 khi đóng gói (không phải thiếu file trong spec).
+        self._patch_yolov5_file_stat_calls()
 
         # bảo vệ tương tự auto_label_logic.py (checkpoint train trên Windows,
         # chạy trên Linux có thể lỗi path) - nhưng CHỈ bọc quanh đúng lệnh load,
