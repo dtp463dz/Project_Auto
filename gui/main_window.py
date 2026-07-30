@@ -1,4 +1,6 @@
 import os
+import sys
+import ctypes
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import (
@@ -7,7 +9,7 @@ from PyQt5.QtWidgets import (
     QListWidgetItem, QShortcut, QSizePolicy, QSplitter, QFrame
 )
 from PyQt5.QtCore import Qt, QRect, QRectF, QSettings
-from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QColor
+from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QColor, QIcon
 
 from gui.theme import get_theme_qss
 from gui.logger import setup_logger
@@ -26,10 +28,20 @@ from logic.auto_label_logic import AutoLabelLogic
 from logic.auto_label_logic_v5 import AutoLabelLogicV5
 log = setup_logger()
 
+
+def resource_path(relative_path):
+    """Trả về đường dẫn đúng tới file asset, dù đang chạy từ source (.py)
+    hay từ .exe đã đóng gói bằng PyInstaller (asset lúc đó nằm trong
+    thư mục tạm sys._MEIPASS, không phải cùng chỗ với source)."""
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base_path, relative_path)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TPLabel")
+        self.setWindowIcon(QIcon(resource_path(os.path.join("assets", "eye.ico"))))
         self.resize(1200, 700)
         self.file_lib = FileLib(self)
         self.edit_lib = EditLib(self)
@@ -515,8 +527,27 @@ class MainWindow(QMainWindow):
         self.current_theme = theme_name
         self.setStyleSheet(get_theme_qss(theme_name))
         self.settings.setValue("theme", theme_name)
+        self._set_native_titlebar_dark(theme_name == "dark")
         if hasattr(self, "btn_theme_toggle"):
             self._update_theme_button_text()
+
+    def _set_native_titlebar_dark(self, dark: bool):
+        """Đổi màu title bar THẬT của Windows (phần viền do hệ điều hành vẽ,
+        nằm ngoài vùng client của Qt) - QSS/setStyleSheet KHÔNG với tới được
+        chỗ này, phải gọi thẳng Windows DWM API (DwmSetWindowAttribute)."""
+        if sys.platform != "win32":
+            return
+        try:
+            hwnd = int(self.winId())
+            value = ctypes.c_int(1 if dark else 0)
+            # DWMWA_USE_IMMERSIVE_DARK_MODE: 20 (Windows 10 20H1+/11), 19 (bản cũ hơn)
+            for attribute in (20, 19):
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)
+                )
+        except Exception as e:
+            log.warning(f"Không đổi được màu title bar hệ thống: {e}")
+
     def toggle_theme(self):
         new_theme = "dark" if self.current_theme == "light" else "light"
         self.apply_theme(new_theme)

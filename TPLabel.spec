@@ -51,6 +51,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='TPLabel',
+    icon='assets/eye.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
