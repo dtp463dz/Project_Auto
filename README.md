@@ -6,12 +6,23 @@
 # Code by Happy22
 ---
 
+## Đóng gói ứng dụng trên Windows
+
+Kích hoạt môi trường Python đã cài các dependency trong `requirements.txt`, sau đó chạy tại thư mục dự án:
+
+```powershell
+python -m PyInstaller --noconfirm TPLabel.spec
+```
+
+Ứng dụng dạng thư mục sẽ được tạo tại `dist/TPLabel_App/TPLabel.exe`; cần giữ nguyên thư mục `_internal` bên cạnh file `.exe` khi phân phối.
+
 ## 📌 Tính năng chính
 
 ### 1. Quản lý dự án & File dữ liệu linh hoạt
 * **Hỗ trợ đa định dạng:** Dễ dàng mở thư mục hình ảnh (`Open Dir`) và thư mục lưu trữ nhãn (`Change Save Dir`).
 * **Định dạng nhãn chuẩn:** Quản lý danh sách lớp (classes) thông qua file `predefined_classes.txt` và lưu vết tọa độ nhãn theo định dạng YOLO (.txt).
 * **Danh sách điều hướng trực quan:** Tích hợp File List và Label List giúp kiểm tra nhanh trạng thái dán nhãn của từng ảnh trong thư mục.
+* **Xóa an toàn:** `Delete_All` chuyển ảnh đang hiển thị và file nhãn `.txt` trùng tên vào Recycle Bin; `classes.txt` được giữ nguyên. Nút `Delete` hiện tại vẫn xóa vĩnh viễn ảnh đang mở và nhãn tương ứng.
 
 ### 2. Canvas tương tác cao (Image Canvas)
 * **Thao tác mượt mà:** Hỗ trợ phóng to, thu nhỏ (Zoom In/Out), kéo pan ảnh (Move Canvas) và đưa ảnh về trung tâm (Center Image).

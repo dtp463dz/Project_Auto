@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QRect, QRectF, QSettings
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QColor, QIcon
+from send2trash import send2trash
 
 from gui.theme import get_theme_qss
 from gui.logger import setup_logger
@@ -118,7 +119,8 @@ class MainWindow(QMainWindow):
         self.btn_auto = QPushButton("⚙ Auto Labels")
         self.btn_auto_v5 = QPushButton("⚙ Auto Labels (v5)")
         self.btn_save = QPushButton("💾 Save") 
-        self.btn_delete_all = QPushButton("❌ Delete") 
+        self.btn_delete_current = QPushButton("❌ Delete")
+        self.btn_delete_all = QPushButton("Delete_All")
         self.btn_photoshop = QPushButton("🧩 Photoshop")
 
         # nút điều hướng/thiết lập dùng style trung tính (navBtn), không cạnh
@@ -129,7 +131,12 @@ class MainWindow(QMainWindow):
                     self.btn_auto_v5):
             btn.setObjectName("navBtn")
         self.btn_save.setObjectName("successBtn")       # xanh lá - hành động an toàn
-        self.btn_delete_all.setObjectName("dangerBtn")  # đỏ - hành động phá huỷ
+        self.btn_delete_current.setObjectName("dangerBtn")
+        self.btn_delete_all.setObjectName("dangerBtn")
+        self.btn_delete_current.setToolTip("Xóa vĩnh viễn ảnh hiện tại và nhãn")
+        self.btn_delete_all.setToolTip(
+            "Chuyển ảnh đang hiển thị và nhãn tương ứng vào Recycle Bin"
+        )
 
         self.btn_ok.clicked.connect(self.select_ok_folder)
         self.btn_ng.clicked.connect(self.select_ng_folder)
@@ -141,7 +148,8 @@ class MainWindow(QMainWindow):
         self.btn_zoom_in.clicked.connect(self.canvas.zoom_in)
         self.btn_zoom_out.clicked.connect(self.canvas.zoom_out)
         self.btn_save.clicked.connect(self.save_label)
-        self.btn_delete_all.clicked.connect(self.delete_curent_image_label)
+        self.btn_delete_current.clicked.connect(self.delete_curent_image_label)
+        self.btn_delete_all.clicked.connect(self.delete_all_images_and_labels)
         self.btn_photoshop.clicked.connect(self.open_photoshop_dialog)
 
         def section_title(text):
@@ -191,6 +199,7 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.btn_save)
 
         control_layout.addSpacing(14)   # tách xa Save - tránh bấm nhầm sang Delete
+        control_layout.addWidget(self.btn_delete_current)
         control_layout.addWidget(self.btn_delete_all)
 
         control_layout.addStretch()   # đẩy toàn bộ nhóm lên trên, không canh giữa nữa
@@ -783,7 +792,98 @@ class MainWindow(QMainWindow):
                 f"Failed to delete image: \n{str(e)}"
             )
         return
-        
+
+    def delete_all_images_and_labels(self):
+        if not 0 <= self.current_index < len(self.current_images):
+            return
+        if not self.check_unsaved():
+            return
+
+        image_path = self.current_images[self.current_index]
+        if not os.path.isfile(image_path):
+            QMessageBox.information(
+                self,
+                "Image Not Found",
+                f"The current image no longer exists:\n{image_path}"
+            )
+            return
+
+        label_path = None
+        if self.labels_dir and os.path.isdir(self.labels_dir):
+            image_name = os.path.splitext(os.path.basename(image_path))[0]
+            candidate = os.path.join(self.labels_dir, image_name + ".txt")
+            if os.path.isfile(candidate):
+                label_path = candidate
+
+        reply = QMessageBox.question(
+            self,
+            "Delete_All",
+            f"Move this image and its matching label to the Recycle Bin?\n\n"
+            f"Image: {image_path}\n"
+            f"Label: {label_path or 'No matching label found'}\n\n"
+            "The files will not be permanently deleted. classes.txt will be kept.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        image_path_for_trash = os.path.normpath(image_path)
+        try:
+            send2trash(image_path_for_trash)
+            log.info(f"Moved to Recycle Bin: {image_path_for_trash}")
+        except Exception as e:
+            log.exception(f"Failed to move to Recycle Bin: {image_path_for_trash}")
+            QMessageBox.critical(
+                self,
+                "Delete_All Failed",
+                f"Could not move image to the Recycle Bin:\n{image_path}\n\n{e}"
+            )
+            return
+
+        label_error = None
+        if label_path:
+            label_path_for_trash = os.path.normpath(label_path)
+            try:
+                send2trash(label_path_for_trash)
+                log.info(f"Moved to Recycle Bin: {label_path_for_trash}")
+            except Exception as e:
+                label_error = e
+                log.exception(f"Failed to move to Recycle Bin: {label_path_for_trash}")
+
+        del self.current_images[self.current_index]
+        self.dirty = False
+        if not self.current_images:
+            self.canvas.pixmap = None
+            self.canvas.boxes.clear()
+            self.canvas.selected_box = None
+            self.canvas.update()
+            self.image_list.clear()
+            self.box_list.clear()
+            self.current_index = -1
+            self.update_window_title()
+            self.image_info.setText("🖼  No image")
+        else:
+            self.current_index = min(self.current_index, len(self.current_images) - 1)
+            self.refresh_image_list()
+            self.update_image()
+
+        if label_error:
+            QMessageBox.warning(
+                self,
+                "Image Moved, Label Not Moved",
+                f"The image was moved to the Recycle Bin, but its label could not be moved:\n"
+                f"{label_path}\n\n{label_error}"
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Delete_All Complete",
+                "Moved the current image and its matching label to the Recycle Bin."
+                if label_path else
+                "Moved the current image to the Recycle Bin. No matching label was found."
+            )
+
     def save_classes_file(self):
         if not self.labels_dir:
             return
