@@ -27,6 +27,7 @@ python -m PyInstaller --noconfirm TPLabel.spec
 ### 2. Canvas tương tác cao (Image Canvas)
 * **Thao tác mượt mà:** Hỗ trợ phóng to, thu nhỏ (Zoom In/Out), kéo pan ảnh (Move Canvas) và đưa ảnh về trung tâm (Center Image).
 * **Vẽ Box linh hoạt:** Tạo bounding box (`Create Box`), chỉnh sửa tọa độ kéo thả, thay đổi nhãn lớp, xóa box hoặc thực hiện các lệnh Hoàn tác/Làm lại (`Undo`/`Redo`) lên đến 100 bước lịch sử.
+* **Single Class Mode:** Bật trong menu `View` hoặc nhấn `Ctrl+Shift+S` để tự gán class hiện tại cho các box tiếp theo; lựa chọn được lưu khi mở lại ứng dụng.
 
 ### 3. Cơ chế Tự động dán nhãn (Auto-Labeling)
 * **Tích hợp Model AI:** Tích hợp mô hình học sâu (Ultralytics YOLO, PyTorch) để tự động phát hiện đối tượng trong tầm nhìn.

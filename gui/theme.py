@@ -259,6 +259,15 @@ QLabel#modeBadgeNone {
     border-radius: 8px;
     padding: 4px 12px;
 }
+QLabel#singleClassStatus {
+    background-color: #E4F5EA;
+    border: 1px solid #7FCB9F;
+    color: #1F7A4C;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 10px;
+}
 """
 
 DARK_QSS = """
@@ -522,6 +531,15 @@ QLabel#modeBadgeNone {
     font-weight: bold;
     border-radius: 8px;
     padding: 4px 12px;
+}
+QLabel#singleClassStatus {
+    background-color: #1E3A2B;
+    border: 1px solid #3E7A57;
+    color: #7FDBA4;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 4px 10px;
 }
 """
 

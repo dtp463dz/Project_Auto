@@ -65,6 +65,15 @@ class MainWindow(QMainWindow):
 
         self.settings = QSettings("TPLabel", "TPLabelApp")
         self.current_theme = self.settings.value("theme", "light")
+        self.single_class_mode = self.settings.value(
+            "single_class_mode", False, type=bool
+        )
+        self.action_single_class_mode = QAction("Single Class Mode", self)
+        self.action_single_class_mode.setCheckable(True)
+        self.action_single_class_mode.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        self.action_single_class_mode.setChecked(self.single_class_mode)
+        self.action_single_class_mode.toggled.connect(self.set_single_class_mode)
+        self.view_lib.menu.addAction(self.action_single_class_mode)
 
         QShortcut(QKeySequence("Ctrl+S"), self, self.save_label)
         QShortcut(QKeySequence("Ctrl+Z"), self, self.canvas.undo)
@@ -88,6 +97,7 @@ class MainWindow(QMainWindow):
 
         status_layout = QHBoxLayout()
         status_layout.addWidget(self.model_label)
+        status_layout.addWidget(self.single_class_status)
         status_layout.addStretch()
         status_layout.addWidget(self.image_info)
         status_layout.addSpacing(12)
@@ -207,6 +217,7 @@ class MainWindow(QMainWindow):
         # label list (danh sách toàn bộ class của project, có checkbox ẩn/hiện)
         self.label_list = QListWidget()
         self.label_list.itemChanged.connect(self.on_label_visibility_changed)
+        self.label_list.itemClicked.connect(self.on_label_item_clicked)
         self.label_list.setMinimumWidth(180)
 
         # box list (danh sách bbox của ảnh hiện tại, click để chọn box trên canvas)
@@ -282,6 +293,7 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(root_layout)
         self.setCentralWidget(central_widget)
         self.refresh_label_list()
+        self.update_single_class_status()
 
     # MENU 
     def init_menu(self):
@@ -465,6 +477,49 @@ class MainWindow(QMainWindow):
         self.image_info = QLabel("🖼  0 / 0")
         self.image_info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
+        self.single_class_status = QLabel()
+        self.single_class_status.setObjectName("singleClassStatus")
+        self.single_class_status.setVisible(self.single_class_mode)
+
+    def set_single_class_mode(self, enabled):
+        self.single_class_mode = enabled
+        self.settings.setValue("single_class_mode", enabled)
+        self.update_single_class_status()
+
+    def _current_single_class_id(self):
+        current_item = (
+            self.label_list.currentItem() if hasattr(self, "label_list") else None
+        )
+        if current_item is not None and not current_item.isSelected():
+            current_item = None
+        if current_item is not None:
+            label_id = current_item.data(Qt.UserRole)
+            if isinstance(label_id, int) and 0 <= label_id < len(self.labels):
+                return label_id
+        if (isinstance(self.last_label_id, int)
+                and 0 <= self.last_label_id < len(self.labels)):
+            return self.last_label_id
+        if len(self.labels) == 1:
+            return 0
+        return None
+
+    def update_single_class_status(self):
+        if not hasattr(self, "single_class_status"):
+            return
+        if not self.single_class_mode:
+            self.single_class_status.hide()
+            return
+        label_id = self._current_single_class_id()
+        label_name = self.labels[label_id] if label_id is not None else "chưa chọn"
+        self.single_class_status.setText(f"Single class: {label_name}")
+        self.single_class_status.show()
+
+    def on_label_item_clicked(self, item):
+        label_id = item.data(Qt.UserRole)
+        if isinstance(label_id, int) and 0 <= label_id < len(self.labels):
+            self.last_label_id = label_id
+            self.update_single_class_status()
+
     def next_image(self):
         if not self.current_images:
             print('next fail')
@@ -582,6 +637,7 @@ class MainWindow(QMainWindow):
             item.setForeground(QColor(color))
             self.label_list.addItem(item)
         self.label_list.blockSignals(False)
+        self.update_single_class_status()
 
     def toggle_all_labels_visibility(self):
         if len(self.hidden_labels) < len(self.labels):
@@ -610,15 +666,23 @@ class MainWindow(QMainWindow):
 
         self.box_list.blockSignals(False)
 
-    def on_box_created(self, rect:QRectF):
+    def _select_class_for_new_annotation(self):
+        if self.single_class_mode:
+            label_id = self._current_single_class_id()
+            if label_id is not None:
+                self.last_label_id = label_id
+                return label_id, self.labels[label_id]
+
         dialog = SelectLabelDialog(self.labels, current=self.last_label_id, parent=self)
         if not dialog.exec_():
-            return
+            return None
         action, result = dialog.get_result()
         if action == "select":
             if not isinstance(result, int):
                 print("BUG: select nhưng result = ", result, type(result))
-                return
+                return None
+            if not 0 <= result < len(self.labels):
+                return None
             label_id = result
             label_name = self.labels[label_id]
         elif action == "new":
@@ -635,16 +699,22 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "Error", "Label name already exists")
                 else:
                     self._apply_label_rename(idx, new_name)
-            # box vừa vẽ chưa gán nhãn nào - không thêm vào canvas, người dùng vẽ lại nếu cần
-            return
+            return None
         elif action == "delete":
             del_index = result
             self._apply_label_delete(del_index)
-            # box vừa vẽ chưa gán nhãn nào - không thêm vào canvas, người dùng vẽ lại nếu cần
-            return
+            return None
         else:
+            return None
+        self.last_label_id = label_id
+        self.update_single_class_status()
+        return label_id, label_name
+
+    def on_box_created(self, rect:QRectF):
+        selected_label = self._select_class_for_new_annotation()
+        if selected_label is None:
             return
-        self.last_label_id = label_id   # nhớ lại cho lần vẽ bbox kế tiếp
+        label_id, label_name = selected_label
         self.canvas.boxes.append({
             "label": label_id,
             "label_name": label_name,
@@ -1049,6 +1119,7 @@ class MainWindow(QMainWindow):
             item["label"] = label_id
             item["label_name"] = label_name
             self.last_label_id = label_id
+            self.update_single_class_status()
             self.dirty = True
             self.update_window_title()
         elif action == "new": 
@@ -1062,6 +1133,7 @@ class MainWindow(QMainWindow):
             item["label"] = label_id
             item["label_name"] = name
             self.last_label_id = label_id
+            self.update_single_class_status()
             self.dirty = True
             self.update_window_title()
             self.canvas.update()
